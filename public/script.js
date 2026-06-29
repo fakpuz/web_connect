@@ -113,21 +113,27 @@
   }
 
   function updateStatusBar() {
-    const totalPeers  = Object.keys(peers).length;
-    if (totalPeers === 0) { statusBar.classList.add('hidden'); return; }
+    const totalPeers = Object.keys(peers).length;
+    const voicePeers = Object.values(peers).filter(p => p.wantsVoiceOnly).length;
+    const anyVoice   = voiceOnly || voicePeers > 0;
 
-    const voicePeers  = Object.values(peers).filter(p => p.wantsVoiceOnly).length;
-    const videoPeers  = totalPeers - voicePeers;
+    // Only show when voice-only is actually involved
+    if (!anyVoice || totalPeers === 0) { statusBar.classList.add('hidden'); return; }
 
-    // Include self in counts
-    const totalVideo  = videoPeers  + (voiceOnly ? 0 : 1);
-    const totalVoice  = voicePeers  + (voiceOnly ? 1 : 0);
+    let text;
+    if (voiceOnly) {
+      // I'm in voice-only: show full picture (I can't see anyone)
+      const videoPeers = totalPeers - voicePeers;
+      const parts = [];
+      if (videoPeers > 0)     parts.push(`📹 ${videoPeers} in video`);
+      parts.push(`🎙️ ${voicePeers + 1} in voice only`); // +1 = me
+      text = parts.join('  ·  ');
+    } else {
+      // I'm in video: just tell me how many dropped to voice-only
+      text = `🎙️ ${voicePeers} in voice only`;
+    }
 
-    const parts = [];
-    if (totalVideo > 0) parts.push(`📹 ${totalVideo} in video`);
-    if (totalVoice > 0) parts.push(`🎙️ ${totalVoice} voice only`);
-
-    statusBar.textContent = parts.join('  ·  ');
+    statusBar.textContent = text;
     statusBar.classList.remove('hidden');
   }
 
