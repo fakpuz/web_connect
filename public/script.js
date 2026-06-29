@@ -18,7 +18,8 @@
   let localStream = null;
   let audioMuted  = false;
   let videoOff    = false;
-  let voiceOnly   = false;
+  let voiceOnly       = false;
+  let voiceOnlyPreCam = false; // was camera on before entering voice-only?
   const socket    = io();
   const peers     = {}; // peerId -> { pc, panel, video, cell }
   let   zTop      = 10; // increments on every touch; touched panel always wins
@@ -307,7 +308,9 @@
     peers[peerId]?.panel?.remove();
     peers[peerId]?.pc?.close();
     delete peers[peerId];
+    delete peerNumbers[peerId];
     layoutRemoteVideos();
+    updateVoiceIndicators();
   }
 
   // ── WebRTC ────────────────────────────────────────────────────────────────
@@ -369,23 +372,46 @@
     layoutRemoteVideos();
   });
 
+  // ── Voice-only peer indicators ────────────────────────────────────────────
+  const voiceIndicators = document.getElementById('voice-indicators');
+  let peerNumbers = {}; // peerId → display number
+  let peerCounter = 0;
+
+  function getPeerNumber(id) {
+    if (!peerNumbers[id]) peerNumbers[id] = ++peerCounter;
+    return peerNumbers[id];
+  }
+
+  function updateVoiceIndicators() {
+    voiceIndicators.innerHTML = '';
+    Object.entries(peers).forEach(([id, p]) => {
+      if (!p.wantsVoiceOnly) return;
+      const el = document.createElement('div');
+      el.className = 'voice-bubble';
+      el.textContent = `🎙️  Person ${getPeerNumber(id)} — voice only`;
+      voiceIndicators.appendChild(el);
+    });
+  }
+
   // Peer wants voice-only: stop sending video to them (saves their bandwidth)
   socket.on('voice-only', ({ from }) => {
     const peer = peers[from];
-    if (!peer?.videoSender) return;
-    peer.videoSender.replaceTrack(null);
+    if (!peer) return;
     peer.wantsVoiceOnly = true;
+    if (peer.videoSender) peer.videoSender.replaceTrack(null);
+    updateVoiceIndicators();
   });
 
   // Peer resumed video: send them our video track again
   socket.on('voice-only-off', ({ from }) => {
     const peer = peers[from];
-    if (!peer?.videoSender) return;
+    if (!peer) return;
     peer.wantsVoiceOnly = false;
-    if (!videoOff) {
+    if (peer.videoSender && !videoOff) {
       const track = (screenStream || localStream)?.getVideoTracks()[0];
       if (track) peer.videoSender.replaceTrack(track);
     }
+    updateVoiceIndicators();
   });
 
   socket.on('peer-left',  (id) => { removeRemotePanel(id); showToast('Someone left.'); });
@@ -457,6 +483,23 @@
     updateCtrlUI();
   }
   function toggleCamera() {
+    if (voiceOnly) {
+      // Tapping camera while voice-only → exit voice-only and turn camera on
+      voiceOnly = false;
+      voiceOnlyPreCam = false;
+      videoOff = false;
+      localStream?.getVideoTracks().forEach(t => t.enabled = true);
+      socket.emit('voice-only-off');
+      socket.emit('camera-state', { videoOff: false });
+      Object.values(peers).forEach(p => {
+        if (p.wantsVoiceOnly || !p.videoSender) return;
+        const track = localStream?.getVideoTracks()[0];
+        if (track) p.videoSender.replaceTrack(track);
+      });
+      layoutRemoteVideos();
+      updateCtrlUI();
+      return;
+    }
     videoOff = !videoOff;
     localStream?.getVideoTracks().forEach(t => t.enabled = !videoOff);
     socket.emit('camera-state', { videoOff });
@@ -466,13 +509,26 @@
   function toggleVoiceOnly() {
     voiceOnly = !voiceOnly;
     if (voiceOnly) {
-      // Force camera off
-      if (!videoOff) toggleCamera();
-      // Tell all peers to stop sending video to me
+      voiceOnlyPreCam = !videoOff; // remember if camera was on
+      if (!videoOff) {
+        videoOff = true;
+        localStream?.getVideoTracks().forEach(t => t.enabled = false);
+        socket.emit('camera-state', { videoOff: true });
+      }
       socket.emit('voice-only');
     } else {
-      // Tell all peers to resume sending video to me
       socket.emit('voice-only-off');
+      // Restore camera to what it was before
+      if (voiceOnlyPreCam) {
+        videoOff = false;
+        localStream?.getVideoTracks().forEach(t => t.enabled = true);
+        socket.emit('camera-state', { videoOff: false });
+        Object.values(peers).forEach(p => {
+          if (p.wantsVoiceOnly || !p.videoSender) return;
+          const track = localStream?.getVideoTracks()[0];
+          if (track) p.videoSender.replaceTrack(track);
+        });
+      }
     }
     layoutRemoteVideos();
     updateCtrlUI();
