@@ -2,27 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>250750.xyz</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-
-  <div id="call-ui">
-    <div id="videos">
-      <div id="remote-wrapper">
-        <video id="remote-video" autoplay playsinline></video>
-        <div id="waiting-msg">Waiting for the other person…</div>
-      </div>
-      <div id="local-wrapper">
-        <video id="local-video" autoplay playsinline muted></video>
-      </div>
+  <div id="app">
+    <div id="remote-grid"></div>
+    <div id="local-wrapper">
+      <video id="local-video" autoplay playsinline muted></video>
     </div>
+    <div id="waiting-msg">Waiting for others to join…</div>
   </div>
 
-  <!-- Gesture feedback icon shown on tap -->
   <div id="gesture-icon" class="hidden"></div>
-
   <div id="toast" class="hidden"></div>
 
   <script src="/socket.io/socket.io.js"></script>

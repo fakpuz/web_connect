@@ -1,108 +1,115 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-:root {
-  --bg:   #0f0f13;
-  --muted: #7a7a9a;
-}
-
 html, body {
-  height: 100%;
-  background: var(--bg);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh; /* mobile: excludes browser chrome */
+  background: #000;
   overflow: hidden;
   touch-action: manipulation;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 .hidden { display: none !important; }
 
-#call-ui {
+/* ── Main container ──────────────────────────────────────────────────────── */
+#app {
+  position: relative;
+  width: 100%;
   height: 100%;
-  display: flex;
-  flex-direction: column;
 }
 
-/* ── Video area ─────────────────────────────────────────────────────────── */
-#videos {
-  flex: 1;
-  position: relative;
+/* ── Remote video grid ───────────────────────────────────────────────────── */
+#remote-grid {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  gap: 2px;
   background: #000;
 }
 
-#remote-wrapper {
-  width: 100%;
-  height: 100%;
+/* Grid layouts by number of remote videos */
+#remote-grid.n1 { grid-template-columns: 1fr; }
+#remote-grid.n2 { grid-template-columns: 1fr 1fr; }
+#remote-grid.n3 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+#remote-grid.n4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+
+/* 3 videos: last one spans both columns */
+#remote-grid.n3 .remote-cell:last-child { grid-column: 1 / -1; }
+
+.remote-cell {
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: #111;
+  overflow: hidden;
 }
 
-#remote-video {
+.remote-cell video {
   width: 100%;
   height: 100%;
-  object-fit: contain;   /* full frame, no crop */
+  object-fit: contain;
   display: block;
 }
 
-/* Local: picture-in-picture, bottom-right */
+/* ── Self view — percentage-based, not fixed pixels ─────────────────────── */
 #local-wrapper {
   position: absolute;
-  bottom: 16px;
-  right: 16px;
-  width: 140px;
-  height: 100px;
+  bottom: 2%;
+  right: 2%;
+  width: 22%;
+  max-width: 180px;
+  min-width: 72px;
+  aspect-ratio: 3 / 4;   /* portrait — matches phone camera */
+  background: #111;
   border-radius: 10px;
   overflow: hidden;
-  border: 2px solid rgba(255,255,255,0.15);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.6);
-  z-index: 10;
-  background: #111;
+  border: 1.5px solid rgba(255,255,255,0.2);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.7);
+  z-index: 20;
 }
 
 #local-video {
   width: 100%;
   height: 100%;
-  object-fit: contain;   /* full frame, no crop */
+  object-fit: contain;
   display: block;
   transform: scaleX(-1);
 }
 
-/* ── Waiting overlay ────────────────────────────────────────────────────── */
+/* ── Waiting message ─────────────────────────────────────────────────────── */
 #waiting-msg {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg);
-  color: var(--muted);
+  color: #555;
   font-size: 15px;
-  z-index: 5;
+  z-index: 10;
+  pointer-events: none;
 }
 
-/* ── Gesture feedback icon ──────────────────────────────────────────────── */
+/* ── Gesture icon ────────────────────────────────────────────────────────── */
 #gesture-icon {
   position: fixed;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%) scale(1);
-  font-size: 64px;
+  font-size: 72px;
   z-index: 100;
   pointer-events: none;
   opacity: 1;
   transition: opacity 0.5s ease, transform 0.5s ease;
-  filter: drop-shadow(0 2px 12px rgba(0,0,0,0.8));
+  filter: drop-shadow(0 2px 16px rgba(0,0,0,0.9));
 }
-
 #gesture-icon.fade {
   opacity: 0;
-  transform: translate(-50%, -50%) scale(1.4);
+  transform: translate(-50%, -50%) scale(1.5);
 }
 
-/* ── Toast ──────────────────────────────────────────────────────────────── */
+/* ── Toast ───────────────────────────────────────────────────────────────── */
 #toast {
   position: fixed;
-  bottom: 40px;
+  bottom: 5%;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(20,20,34,0.92);
@@ -113,11 +120,5 @@ html, body {
   font-size: 13px;
   z-index: 200;
   white-space: nowrap;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-}
-
-/* ── Mobile ─────────────────────────────────────────────────────────────── */
-@media (max-width: 500px) {
-  #local-wrapper { width: 100px; height: 72px; bottom: 12px; right: 12px; }
-  #gesture-icon { font-size: 80px; }
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
 }

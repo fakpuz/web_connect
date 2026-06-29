@@ -6,72 +6,51 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
-
 const PORT = process.env.PORT || 3000;
+const MAX_PEERS = 4;
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-// Serve index.html for all routes (room IDs handled client-side)
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Track rooms: roomId -> [socketId, socketId]
+// roomId -> Set of socketIds
 const rooms = {};
 
 io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
-
   socket.on('join-room', (roomId) => {
-    if (!rooms[roomId]) {
-      rooms[roomId] = [];
-    }
-
+    if (!rooms[roomId]) rooms[roomId] = new Set();
     const room = rooms[roomId];
 
-    if (room.length >= 2) {
+    if (room.size >= MAX_PEERS) {
       socket.emit('room-full');
       return;
     }
 
-    room.push(socket.id);
+    // Tell newcomer about everyone already in room
+    socket.emit('existing-peers', [...room]);
+
+    // Tell everyone else about the newcomer
+    room.forEach(peerId => io.to(peerId).emit('peer-joined', socket.id));
+
+    room.add(socket.id);
     socket.join(roomId);
     socket.data.roomId = roomId;
-
-    console.log(`Socket ${socket.id} joined room ${roomId} (${room.length}/2)`);
-
-    if (room.length === 2) {
-      // Tell the first peer to initiate the call
-      io.to(room[0]).emit('start-call');
-    }
+    console.log(`${socket.id} joined ${roomId} (${room.size}/${MAX_PEERS})`);
   });
 
-  socket.on('offer', (data) => {
-    socket.to(data.roomId).emit('offer', { sdp: data.sdp });
-  });
-
-  socket.on('answer', (data) => {
-    socket.to(data.roomId).emit('answer', { sdp: data.sdp });
-  });
-
-  socket.on('ice-candidate', (data) => {
-    socket.to(data.roomId).emit('ice-candidate', { candidate: data.candidate });
-  });
+  // Relay signals between specific peers
+  socket.on('offer',         ({ to, sdp })       => io.to(to).emit('offer',         { from: socket.id, sdp }));
+  socket.on('answer',        ({ to, sdp })        => io.to(to).emit('answer',        { from: socket.id, sdp }));
+  socket.on('ice-candidate', ({ to, candidate })  => io.to(to).emit('ice-candidate', { from: socket.id, candidate }));
 
   socket.on('disconnect', () => {
     const roomId = socket.data.roomId;
     if (roomId && rooms[roomId]) {
-      rooms[roomId] = rooms[roomId].filter((id) => id !== socket.id);
-      if (rooms[roomId].length === 0) {
-        delete rooms[roomId];
-      } else {
-        socket.to(roomId).emit('peer-left');
-      }
+      rooms[roomId].delete(socket.id);
+      if (rooms[roomId].size === 0) delete rooms[roomId];
+      else io.to(roomId).emit('peer-left', socket.id);
     }
-    console.log('Client disconnected:', socket.id);
+    console.log(`${socket.id} disconnected`);
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-});
+server.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
