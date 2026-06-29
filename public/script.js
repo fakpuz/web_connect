@@ -383,20 +383,24 @@
   async function toggleScreenShare() {
     if (screenStream) { stopScreenShare(); return; }
 
-    if (!navigator.mediaDevices?.getDisplayMedia) {
-      showToast('Screen share is not supported on this browser');
+    // Some mobile browsers put getDisplayMedia on navigator directly (not mediaDevices)
+    const gdm = navigator.mediaDevices?.getDisplayMedia?.bind(navigator.mediaDevices)
+             || navigator.getDisplayMedia?.bind(navigator);
+
+    if (!gdm) {
+      const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent);
+      showToast(isIOS
+        ? 'iOS does not support screen share in browsers'
+        : 'Screen share not supported — try Chrome or update your browser');
       return;
     }
     try {
-      screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: { ideal: 30 } },
-        audio: false,
-      });
+      screenStream = await gdm({ video: { frameRate: { ideal: 30 } }, audio: false });
       const track = screenStream.getVideoTracks()[0];
       localVideo.srcObject = new MediaStream([track, ...(localStream?.getAudioTracks() ?? [])]);
       replaceVideoTrack(track);
       updateCtrlUI();
-      track.onended = stopScreenShare; // user pressed browser's native "stop sharing"
+      track.onended = stopScreenShare;
     } catch (err) {
       screenStream = null;
       updateCtrlUI();
