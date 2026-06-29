@@ -3,7 +3,7 @@
 html, body {
   width: 100%;
   height: 100vh;
-  height: 100dvh; /* mobile: excludes browser chrome */
+  height: 100dvh;
   background: #000;
   overflow: hidden;
   touch-action: pan-x pan-y pinch-zoom;
@@ -14,45 +14,31 @@ html, body {
 
 .hidden { display: none !important; }
 
-/* ── Main container ──────────────────────────────────────────────────────── */
 #app {
   position: relative;
   width: 100%;
   height: 100%;
 }
 
-/* ── Remote video grid ───────────────────────────────────────────────────── */
-#remote-grid {
-  width: 100%;
-  height: 100%;
-  display: grid;
-  gap: 2px;
-  background: #000;
-}
-
-/* Grid layouts by number of remote videos */
-#remote-grid.n1 { grid-template-columns: 1fr; }
-#remote-grid.n2 { grid-template-columns: 1fr 1fr; }
-#remote-grid.n3 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
-#remote-grid.n4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
-
-/* 3 videos: last one spans both columns */
-#remote-grid.n3 .remote-cell:last-child { grid-column: 1 / -1; }
-
+/* ── Remote video cells — fixed, draggable ───────────────────────────────── */
 .remote-cell {
-  position: relative;
-  background: #111;
+  position: fixed;
   overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  z-index: 5;
+  background: #111;
 }
-
+.remote-cell:active { cursor: grabbing; }
 .remote-cell video {
   width: 100%;
   height: 100%;
   object-fit: contain;
   display: block;
+  pointer-events: none;
 }
 
-/* ── Self view — draggable, no box, just shadow ──────────────────────────── */
+/* ── Self view — fixed, draggable, no box ────────────────────────────────── */
 #local-wrapper {
   position: fixed;
   bottom: 2%;
@@ -71,7 +57,6 @@ html, body {
   touch-action: none;
 }
 #local-wrapper:active { cursor: grabbing; }
-
 #local-video {
   width: 100%;
   height: 100%;
@@ -82,14 +67,14 @@ html, body {
 
 /* ── Waiting message ─────────────────────────────────────────────────────── */
 #waiting-msg {
-  position: absolute;
+  position: fixed;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #555;
   font-size: 15px;
-  z-index: 10;
+  z-index: 4;
   pointer-events: none;
 }
 

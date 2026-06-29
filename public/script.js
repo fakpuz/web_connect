@@ -2,19 +2,17 @@
   const FIXED_ROOM = 'main';
   const STUN = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] };
 
-  const remoteGrid  = document.getElementById('remote-grid');
-  const localVideo  = document.getElementById('local-video');
-  const waitingMsg  = document.getElementById('waiting-msg');
-  const gestureIcon = document.getElementById('gesture-icon');
-  const toast       = document.getElementById('toast');
+  const localVideo   = document.getElementById('local-video');
+  const localWrapper = document.getElementById('local-wrapper');
+  const waitingMsg   = document.getElementById('waiting-msg');
+  const gestureIcon  = document.getElementById('gesture-icon');
+  const toast        = document.getElementById('toast');
 
   let localStream = null;
   let audioMuted  = false;
   let videoOff    = false;
   const socket    = io();
-
-  // peerId -> { pc, cell, video }
-  const peers = {};
+  const peers     = {}; // peerId -> { pc, cell, video }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   function showToast(msg, ms = 3000) {
@@ -33,38 +31,113 @@
     gestureIcon._t = setTimeout(() => gestureIcon.classList.add('hidden'), 650);
   }
 
-  function updateGrid() {
-    const n = Object.keys(peers).length;
-    remoteGrid.className = n > 0 ? `n${Math.min(n, 4)}` : '';
-    waitingMsg.style.display = n === 0 ? 'flex' : 'none';
+  // ── Drag — shared for both local and remote ───────────────────────────────
+  // containFully=true  → element must stay completely within screen (remote videos)
+  // containFully=false → element can go partially off-screen (self-view)
+  function makeDraggable(el, containFully) {
+    let dragging = false, didDrag = false, ox = 0, oy = 0;
+
+    el.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      didDrag  = false;
+      el.setPointerCapture(e.pointerId);
+      const r = el.getBoundingClientRect();
+      ox = e.clientX - r.left;
+      oy = e.clientY - r.top;
+      e.stopPropagation();
+    });
+
+    el.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      didDrag = true;
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      let x = e.clientX - ox;
+      let y = e.clientY - oy;
+
+      if (containFully) {
+        // Stay fully inside screen
+        x = Math.max(0, Math.min(window.innerWidth  - w, x));
+        y = Math.max(0, Math.min(window.innerHeight - h, y));
+      } else {
+        // Allow going mostly off-screen but keep 40px visible
+        const B = 40;
+        x = Math.max(B - w, Math.min(window.innerWidth  - B, x));
+        y = Math.max(B - h, Math.min(window.innerHeight - B, y));
+      }
+
+      el.style.left   = x + 'px';
+      el.style.top    = y + 'px';
+      el.style.right  = 'auto';
+      el.style.bottom = 'auto';
+    });
+
+    el.addEventListener('click', (e) => {
+      if (didDrag) { didDrag = false; e.stopPropagation(); }
+    });
+
+    el.addEventListener('pointerup',    () => { dragging = false; });
+    el.addEventListener('pointercancel',() => { dragging = false; });
   }
 
-  // ── Create/remove remote video cell ──────────────────────────────────────
+  // ── Layout: compute grid positions for N remote videos ────────────────────
+  function gridPositions(n) {
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    if (n === 1) return [{ x:0,   y:0,   w:W,   h:H   }];
+    if (n === 2) return [{ x:0,   y:0,   w:W/2, h:H   },
+                         { x:W/2, y:0,   w:W/2, h:H   }];
+    if (n === 3) return [{ x:0,   y:0,   w:W/2, h:H/2 },
+                         { x:W/2, y:0,   w:W/2, h:H/2 },
+                         { x:0,   y:H/2, w:W,   h:H/2 }];
+    return           [{ x:0,   y:0,   w:W/2, h:H/2 },
+                      { x:W/2, y:0,   w:W/2, h:H/2 },
+                      { x:0,   y:H/2, w:W/2, h:H/2 },
+                      { x:W/2, y:H/2, w:W/2, h:H/2 }];
+  }
+
+  function layoutRemoteVideos() {
+    const cells = Object.values(peers).map(p => p.cell).filter(Boolean);
+    const positions = gridPositions(cells.length);
+    cells.forEach((cell, i) => {
+      const p = positions[i];
+      cell.style.left   = p.x + 'px';
+      cell.style.top    = p.y + 'px';
+      cell.style.width  = p.w + 'px';
+      cell.style.height = p.h + 'px';
+      cell.style.right  = 'auto';
+      cell.style.bottom = 'auto';
+    });
+    waitingMsg.style.display = cells.length === 0 ? 'flex' : 'none';
+  }
+
+  window.addEventListener('resize', layoutRemoteVideos);
+
+  // ── Remote video management ───────────────────────────────────────────────
   function addRemoteVideo(peerId) {
     if (peers[peerId]?.cell) return;
-    const cell = document.createElement('div');
+    const cell  = document.createElement('div');
     cell.className = 'remote-cell';
-    cell.id = `peer-${peerId}`;
     const video = document.createElement('video');
-    video.autoplay = true;
+    video.autoplay   = true;
     video.playsInline = true;
     cell.appendChild(video);
-    remoteGrid.appendChild(cell);
+    document.getElementById('app').appendChild(cell);
     if (!peers[peerId]) peers[peerId] = {};
     peers[peerId].cell  = cell;
     peers[peerId].video = video;
-    updateGrid();
-    return video;
+    makeDraggable(cell, true); // fully contained
+    layoutRemoteVideos();
   }
 
   function removeRemoteVideo(peerId) {
-    if (peers[peerId]?.cell) peers[peerId].cell.remove();
-    if (peers[peerId]?.pc)   peers[peerId].pc.close();
+    peers[peerId]?.cell?.remove();
+    peers[peerId]?.pc?.close();
     delete peers[peerId];
-    updateGrid();
+    layoutRemoteVideos();
   }
 
-  // ── Peer connection ───────────────────────────────────────────────────────
+  // ── WebRTC ────────────────────────────────────────────────────────────────
   function createPC(peerId) {
     const pc = new RTCPeerConnection(STUN);
     if (!peers[peerId]) peers[peerId] = {};
@@ -73,7 +146,7 @@
     localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
 
     pc.ontrack = (e) => {
-      const video = peers[peerId]?.video || addRemoteVideo(peerId);
+      const video = peers[peerId]?.video || (() => { addRemoteVideo(peerId); return peers[peerId].video; })();
       video.srcObject = e.streams[0];
     };
 
@@ -86,29 +159,24 @@
         removeRemoteVideo(peerId);
       }
     };
-
     return pc;
   }
 
   // ── Signaling ─────────────────────────────────────────────────────────────
-  // We are the newcomer — initiate offers to everyone already in the room
   socket.on('existing-peers', async (peerIds) => {
     for (const peerId of peerIds) {
       addRemoteVideo(peerId);
-      const pc = createPC(peerId);
+      const pc    = createPC(peerId);
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       socket.emit('offer', { to: peerId, sdp: pc.localDescription });
     }
   });
 
-  // Someone new joined — they'll send us an offer, just wait
-  socket.on('peer-joined', (peerId) => {
-    addRemoteVideo(peerId);
-  });
+  socket.on('peer-joined', (peerId) => addRemoteVideo(peerId));
 
   socket.on('offer', async ({ from, sdp }) => {
-    const pc = createPC(from);
+    const pc     = createPC(from);
     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
@@ -124,33 +192,14 @@
     catch (e) { console.error(e); }
   });
 
-  socket.on('peer-left', (peerId) => {
-    removeRemoteVideo(peerId);
-    showToast('Someone left the call.');
-  });
-
-  socket.on('room-full', () => showToast('Room is full (max 4 people).'));
-
-  // ── Gesture controls ──────────────────────────────────────────────────────
-  function toggleMute() {
-    audioMuted = !audioMuted;
-    localStream?.getAudioTracks().forEach(t => t.enabled = !audioMuted);
-    showIcon(audioMuted ? '🔇' : '🎤');
-  }
-
-  function toggleCamera() {
-    videoOff = !videoOff;
-    localStream?.getVideoTracks().forEach(t => t.enabled = !videoOff);
-    showIcon(videoOff ? '📵' : '📷');
-  }
+  socket.on('peer-left',  (peerId) => { removeRemoteVideo(peerId); showToast('Someone left.'); });
+  socket.on('room-full',  ()       => showToast('Room is full (max 4 people).'));
 
   // ── Screen share ──────────────────────────────────────────────────────────
   let screenStream = null;
 
   async function toggleScreenShare() {
-    // Mobile browsers don't support getDisplayMedia — silently ignore
     if (!navigator.mediaDevices?.getDisplayMedia) return;
-
     if (screenStream) {
       screenStream.getTracks().forEach(t => t.stop());
       screenStream = null;
@@ -161,47 +210,13 @@
     }
     try {
       screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      const screenTrack = screenStream.getVideoTracks()[0];
-      localVideo.srcObject = new MediaStream([screenTrack, ...localStream.getAudioTracks()]);
-      replaceVideoTrack(screenTrack);
+      const track  = screenStream.getVideoTracks()[0];
+      localVideo.srcObject = new MediaStream([track, ...localStream.getAudioTracks()]);
+      replaceVideoTrack(track);
       showIcon('🖥️');
-      screenTrack.onended = () => toggleScreenShare();
-    } catch (e) {
-      // User cancelled picker — ignore silently
-    }
+      track.onended = () => toggleScreenShare();
+    } catch (_) {}
   }
-
-  // ── Draggable self-view ───────────────────────────────────────────────────
-  const localWrapper = document.getElementById('local-wrapper');
-  let dragging = false, dragOX = 0, dragOY = 0;
-
-  localWrapper.addEventListener('pointerdown', (e) => {
-    dragging = true;
-    localWrapper.setPointerCapture(e.pointerId);
-    const r = localWrapper.getBoundingClientRect();
-    dragOX = e.clientX - r.left;
-    dragOY = e.clientY - r.top;
-    e.stopPropagation();
-  });
-
-  localWrapper.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
-    const BUFFER = 40; // min px that must stay on screen
-    const w = localWrapper.offsetWidth;
-    const h = localWrapper.offsetHeight;
-    let x = e.clientX - dragOX;
-    let y = e.clientY - dragOY;
-    // Allow dragging mostly off-screen but keep BUFFER px visible
-    x = Math.max(BUFFER - w, Math.min(window.innerWidth  - BUFFER, x));
-    y = Math.max(BUFFER - h, Math.min(window.innerHeight - BUFFER, y));
-    localWrapper.style.left   = x + 'px';
-    localWrapper.style.top    = y + 'px';
-    localWrapper.style.right  = 'auto';
-    localWrapper.style.bottom = 'auto';
-  });
-
-  localWrapper.addEventListener('pointerup',    () => { dragging = false; });
-  localWrapper.addEventListener('pointercancel',() => { dragging = false; });
 
   function replaceVideoTrack(newTrack) {
     Object.values(peers).forEach(({ pc }) => {
@@ -211,35 +226,38 @@
     });
   }
 
-  // ── Gesture detection: tap / double-tap / long-press ─────────────────────
-  let tapCount    = 0;
-  let tapTimer    = null;
-  let pressTimer  = null;
-  let longPressed = false;
+  // ── Gesture controls ──────────────────────────────────────────────────────
+  function toggleMute()   {
+    audioMuted = !audioMuted;
+    localStream?.getAudioTracks().forEach(t => t.enabled = !audioMuted);
+    showIcon(audioMuted ? '🔇' : '🎤');
+  }
+  function toggleCamera() {
+    videoOff = !videoOff;
+    localStream?.getVideoTracks().forEach(t => t.enabled = !videoOff);
+    showIcon(videoOff ? '📵' : '📷');
+  }
 
-  // Prevent context menu on long press (mobile)
+  let tapCount = 0, tapTimer = null, pressTimer = null, longPressed = false;
+
   document.addEventListener('contextmenu', e => e.preventDefault());
 
   document.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('#local-wrapper')) return;
+    if (e.target.closest('#local-wrapper') || e.target.closest('.remote-cell')) return;
     longPressed = false;
-    pressTimer = setTimeout(() => {
-      longPressed = true;
-      toggleScreenShare();
-    }, 600);
+    pressTimer  = setTimeout(() => { longPressed = true; toggleScreenShare(); }, 600);
   });
 
-  document.addEventListener('pointerup', () => clearTimeout(pressTimer));
-  document.addEventListener('pointercancel', () => clearTimeout(pressTimer));
-
-  // Small movement during hold cancels long press (prevents accidental trigger on scroll)
   document.addEventListener('pointermove', (e) => {
     if (e.movementX ** 2 + e.movementY ** 2 > 100) clearTimeout(pressTimer);
   });
 
+  document.addEventListener('pointerup',    () => clearTimeout(pressTimer));
+  document.addEventListener('pointercancel',() => clearTimeout(pressTimer));
+
   document.addEventListener('click', (e) => {
-    if (e.target.closest('#local-wrapper')) return;
-    if (longPressed) { longPressed = false; return; } // swallow click after long press
+    if (e.target.closest('#local-wrapper') || e.target.closest('.remote-cell')) return;
+    if (longPressed) { longPressed = false; return; }
     tapCount++;
     if (tapCount === 1) {
       tapTimer = setTimeout(() => { tapCount = 0; toggleMute(); }, 260);
@@ -252,10 +270,11 @@
 
   // ── Boot ──────────────────────────────────────────────────────────────────
   window.addEventListener('DOMContentLoaded', async () => {
-    // Fix mobile viewport height
     const setVh = () => document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
     setVh();
     window.addEventListener('resize', setVh);
+
+    makeDraggable(localWrapper, false); // self-view: can go partially off-screen
 
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
