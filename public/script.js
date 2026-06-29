@@ -452,6 +452,17 @@
       tapCount = 0;
       updateCtrlUI();
       ctrlPanel.classList.remove('hidden');
+      // Position near tap point, flip if too close to an edge
+      const pw = ctrlPanel.offsetWidth, ph = ctrlPanel.offsetHeight, mg = 12;
+      let x = e.clientX - pw / 2;
+      let y = e.clientY + 16;
+      // flip above if too close to bottom
+      if (y + ph > window.innerHeight - mg) y = e.clientY - ph - 16;
+      // clamp horizontally
+      x = Math.max(mg, Math.min(window.innerWidth - pw - mg, x));
+      // clamp vertically
+      y = Math.max(mg, Math.min(window.innerHeight - ph - mg, y));
+      Object.assign(ctrlPanel.style, { left: x+'px', top: y+'px' });
     } else {
       tapTimer = setTimeout(() => { tapCount = 0; }, 350);
     }

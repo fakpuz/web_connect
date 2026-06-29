@@ -81,9 +81,7 @@ html, body {
 /* ── Control panel (opens on double-tap) ─────────────────────────────────── */
 #ctrl-panel {
   position: fixed;
-  bottom: 10%;
-  left: 50%;
-  transform: translateX(-50%);
+  /* left/top set dynamically by JS based on tap position */
   display: flex;
   gap: 16px;
   background: rgba(14, 14, 26, 0.94);
