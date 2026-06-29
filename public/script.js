@@ -104,7 +104,32 @@
     });
   }
 
-  window.addEventListener('resize', () => { layoutRemoteVideos(); fitLocalPanel(); });
+  function clampAllPanels() {
+    document.querySelectorAll('.vid-panel').forEach(el => {
+      // Skip hidden or focused (focused gets its own resize handling)
+      if (el.classList.contains('panel-hidden') || el.classList.contains('panel-focused')) return;
+      // Skip panels still using right/bottom CSS positioning (not yet manually placed)
+      if (!el.style.left || el.style.left === 'auto') return;
+      const w = el.offsetWidth, h = el.offsetHeight, B = DRAG_BUFFER;
+      const x = Math.max(B - w, Math.min(window.innerWidth  - B, parseFloat(el.style.left)));
+      const y = Math.max(B - h, Math.min(window.innerHeight - B, parseFloat(el.style.top)));
+      Object.assign(el.style, { left: x+'px', top: y+'px', right: 'auto', bottom: 'auto' });
+    });
+  }
+
+  window.addEventListener('resize', () => {
+    if (focusedPanel) {
+      // Keep focused panel filling the new viewport
+      Object.assign(focusedPanel.style, {
+        left: '0px', top: '0px',
+        width: window.innerWidth  + 'px',
+        height: window.innerHeight + 'px',
+      });
+    }
+    layoutRemoteVideos();
+    fitLocalPanel();
+    clampAllPanels();
+  });
 
   // ── Local panel ───────────────────────────────────────────────────────────
   function fitLocalPanel() {
