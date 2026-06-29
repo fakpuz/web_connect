@@ -148,6 +148,9 @@
   let screenStream = null;
 
   async function toggleScreenShare() {
+    // Mobile browsers don't support getDisplayMedia — silently ignore
+    if (!navigator.mediaDevices?.getDisplayMedia) return;
+
     if (screenStream) {
       screenStream.getTracks().forEach(t => t.stop());
       screenStream = null;
@@ -164,9 +167,41 @@
       showIcon('🖥️');
       screenTrack.onended = () => toggleScreenShare();
     } catch (e) {
-      if (e.name !== 'NotAllowedError') showToast('Screen share not available.');
+      // User cancelled picker — ignore silently
     }
   }
+
+  // ── Draggable self-view ───────────────────────────────────────────────────
+  const localWrapper = document.getElementById('local-wrapper');
+  let dragging = false, dragOX = 0, dragOY = 0;
+
+  localWrapper.addEventListener('pointerdown', (e) => {
+    dragging = true;
+    localWrapper.setPointerCapture(e.pointerId);
+    const r = localWrapper.getBoundingClientRect();
+    dragOX = e.clientX - r.left;
+    dragOY = e.clientY - r.top;
+    e.stopPropagation();
+  });
+
+  localWrapper.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const BUFFER = 40; // min px that must stay on screen
+    const w = localWrapper.offsetWidth;
+    const h = localWrapper.offsetHeight;
+    let x = e.clientX - dragOX;
+    let y = e.clientY - dragOY;
+    // Allow dragging mostly off-screen but keep BUFFER px visible
+    x = Math.max(BUFFER - w, Math.min(window.innerWidth  - BUFFER, x));
+    y = Math.max(BUFFER - h, Math.min(window.innerHeight - BUFFER, y));
+    localWrapper.style.left   = x + 'px';
+    localWrapper.style.top    = y + 'px';
+    localWrapper.style.right  = 'auto';
+    localWrapper.style.bottom = 'auto';
+  });
+
+  localWrapper.addEventListener('pointerup',    () => { dragging = false; });
+  localWrapper.addEventListener('pointercancel',() => { dragging = false; });
 
   function replaceVideoTrack(newTrack) {
     Object.values(peers).forEach(({ pc }) => {

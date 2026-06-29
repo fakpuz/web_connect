@@ -52,22 +52,25 @@ html, body {
   display: block;
 }
 
-/* ── Self view — percentage-based, not fixed pixels ─────────────────────── */
+/* ── Self view — draggable, no box, just shadow ──────────────────────────── */
 #local-wrapper {
-  position: absolute;
+  position: fixed;
   bottom: 2%;
   right: 2%;
   width: 22%;
   max-width: 180px;
   min-width: 72px;
-  aspect-ratio: 3 / 4;   /* portrait — matches phone camera */
-  background: #111;
+  aspect-ratio: 3 / 4;
   border-radius: 10px;
   overflow: hidden;
-  border: 1.5px solid rgba(255,255,255,0.2);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.7);
+  border: none;
+  background: transparent;
+  box-shadow: 0 4px 32px rgba(0,0,0,0.95), 0 0 0 1px rgba(255,255,255,0.04);
   z-index: 20;
+  cursor: grab;
+  touch-action: none;
 }
+#local-wrapper:active { cursor: grabbing; }
 
 #local-video {
   width: 100%;
