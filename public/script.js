@@ -6,6 +6,7 @@
   const localVideo  = document.getElementById('local-video');
   const waitingMsg  = document.getElementById('waiting-msg');
   const gestureIcon = document.getElementById('gesture-icon');
+  const shareBtn    = document.getElementById('share-btn');
   const toast       = document.getElementById('toast');
 
   let localStream = null;
@@ -142,6 +143,48 @@
     videoOff = !videoOff;
     localStream?.getVideoTracks().forEach(t => t.enabled = !videoOff);
     showIcon(videoOff ? '📵' : '📷');
+  }
+
+  // ── Screen share ──────────────────────────────────────────────────────────
+  let screenStream = null;
+
+  shareBtn.addEventListener('click', async () => {
+    if (screenStream) {
+      // Stop screen share, switch back to camera
+      screenStream.getTracks().forEach(t => t.stop());
+      screenStream = null;
+      shareBtn.classList.remove('active');
+      const camTrack = localStream.getVideoTracks()[0];
+      localVideo.srcObject = localStream;
+      replaceVideoTrack(camTrack);
+      return;
+    }
+
+    try {
+      screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      const screenTrack = screenStream.getVideoTracks()[0];
+
+      // Show screen in local preview
+      const previewStream = new MediaStream([screenTrack, ...localStream.getAudioTracks()]);
+      localVideo.srcObject = previewStream;
+
+      // Replace video track in all peer connections
+      replaceVideoTrack(screenTrack);
+      shareBtn.classList.add('active');
+
+      // Auto-stop when user clicks browser's "Stop sharing"
+      screenTrack.onended = () => shareBtn.click();
+    } catch (e) {
+      if (e.name !== 'NotAllowedError') showToast('Screen share failed.');
+    }
+  });
+
+  function replaceVideoTrack(newTrack) {
+    Object.values(peers).forEach(({ pc }) => {
+      if (!pc) return;
+      const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+      if (sender) sender.replaceTrack(newTrack);
+    });
   }
 
   let tapCount = 0, tapTimer = null;
