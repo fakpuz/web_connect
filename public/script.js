@@ -227,7 +227,7 @@
   }
 
   // ── Gesture controls ──────────────────────────────────────────────────────
-  function toggleMute()   {
+  function toggleMute() {
     audioMuted = !audioMuted;
     localStream?.getAudioTracks().forEach(t => t.enabled = !audioMuted);
     showIcon(audioMuted ? '🔇' : '🎤');
@@ -238,26 +238,41 @@
     showIcon(videoOff ? '📵' : '📷');
   }
 
-  let tapCount = 0, tapTimer = null, pressTimer = null, longPressed = false;
+  let tapCount = 0, tapTimer = null;
+  let pressTimer = null, longPressed = false;
+  let pressX = 0, pressY = 0, pressTime = 0;
 
   document.addEventListener('contextmenu', e => e.preventDefault());
 
   document.addEventListener('pointerdown', (e) => {
     if (e.target.closest('#local-wrapper') || e.target.closest('.remote-cell')) return;
+    pressX    = e.clientX;
+    pressY    = e.clientY;
+    pressTime = Date.now();
     longPressed = false;
     pressTimer  = setTimeout(() => { longPressed = true; toggleScreenShare(); }, 600);
   });
 
   document.addEventListener('pointermove', (e) => {
-    if (e.movementX ** 2 + e.movementY ** 2 > 100) clearTimeout(pressTimer);
+    if (e.target.closest('#local-wrapper') || e.target.closest('.remote-cell')) return;
+    const dx = e.clientX - pressX, dy = e.clientY - pressY;
+    if (dx * dx + dy * dy > 64) clearTimeout(pressTimer); // cancel if moved > 8px
   });
 
-  document.addEventListener('pointerup',    () => clearTimeout(pressTimer));
-  document.addEventListener('pointercancel',() => clearTimeout(pressTimer));
+  document.addEventListener('pointercancel', () => clearTimeout(pressTimer));
 
-  document.addEventListener('click', (e) => {
+  // Use pointerup (not click) — more reliable when setPointerCapture is in use
+  document.addEventListener('pointerup', (e) => {
+    clearTimeout(pressTimer);
     if (e.target.closest('#local-wrapper') || e.target.closest('.remote-cell')) return;
     if (longPressed) { longPressed = false; return; }
+
+    const dx      = e.clientX - pressX, dy = e.clientY - pressY;
+    const moved   = dx * dx + dy * dy > 64;
+    const elapsed = Date.now() - pressTime;
+
+    if (moved || elapsed > 300) return; // not a tap
+
     tapCount++;
     if (tapCount === 1) {
       tapTimer = setTimeout(() => { tapCount = 0; toggleMute(); }, 260);
