@@ -19,6 +19,7 @@
   let videoOff    = false;
   const socket    = io();
   const peers     = {}; // peerId -> { pc, panel, video, cell }
+  let   zTop      = 10; // increments on every touch; touched panel always wins
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   function showToast(msg, ms = 3000) {
@@ -133,7 +134,7 @@
       const r = el.getBoundingClientRect();
       ox = e.clientX - r.left;
       oy = e.clientY - r.top;
-      el.style.zIndex = 50;
+      el.style.zIndex = ++zTop; // permanent: last touched stays on top
       e.stopPropagation();
     });
     el.addEventListener('pointermove', (e) => {
@@ -144,8 +145,8 @@
       const y = Math.max(B - h, Math.min(window.innerHeight - B, e.clientY - oy));
       Object.assign(el.style, { left: x+'px', top: y+'px', right: 'auto', bottom: 'auto' });
     });
-    el.addEventListener('pointerup',    () => { dragging = false; el.style.zIndex = ''; });
-    el.addEventListener('pointercancel',() => { dragging = false; el.style.zIndex = ''; });
+    el.addEventListener('pointerup',    () => { dragging = false; });
+    el.addEventListener('pointercancel',() => { dragging = false; });
   }
 
   // ── Remote peer management ────────────────────────────────────────────────
