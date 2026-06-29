@@ -1,6 +1,5 @@
 (() => {
   const FIXED_ROOM = 'main';
-
   const STUN_SERVERS = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
@@ -8,56 +7,96 @@
     ],
   };
 
-  const localVideo  = document.getElementById('local-video');
-  const remoteVideo = document.getElementById('remote-video');
-  const waitingMsg  = document.getElementById('waiting-msg');
-  const muteBtn     = document.getElementById('mute-btn');
-  const cameraBtn   = document.getElementById('camera-btn');
-  const leaveBtn    = document.getElementById('leave-btn');
-  const toast       = document.getElementById('toast');
+  const localVideo   = document.getElementById('local-video');
+  const remoteVideo  = document.getElementById('remote-video');
+  const waitingMsg   = document.getElementById('waiting-msg');
+  const gestureIcon  = document.getElementById('gesture-icon');
+  const toast        = document.getElementById('toast');
 
   let localStream = null;
-  let pc = null;
-  let audioMuted = false;
-  let videoOff = false;
-  const socket = io();
+  let pc          = null;
+  let audioMuted  = false;
+  let videoOff    = false;
+  const socket    = io();
 
-  function showToast(msg, duration = 3500) {
+  // ── Toast ─────────────────────────────────────────────────────────────────
+  function showToast(msg, duration = 3000) {
     toast.textContent = msg;
     toast.classList.remove('hidden');
-    clearTimeout(toast._timer);
-    toast._timer = setTimeout(() => toast.classList.add('hidden'), duration);
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => toast.classList.add('hidden'), duration);
   }
 
-  function setButtonActive(btn, active, offLabel, onLabel) {
-    btn.classList.toggle('off', active);
-    btn.querySelector('span').textContent = active ? onLabel : offLabel;
+  // ── Gesture icon (fades out after showing) ────────────────────────────────
+  function showIcon(emoji) {
+    gestureIcon.textContent = emoji;
+    gestureIcon.classList.remove('hidden', 'fade');
+    // Force reflow so transition re-fires
+    void gestureIcon.offsetWidth;
+    requestAnimationFrame(() => {
+      gestureIcon.classList.add('fade');
+    });
+    clearTimeout(gestureIcon._t);
+    gestureIcon._t = setTimeout(() => gestureIcon.classList.add('hidden'), 600);
   }
 
+  // ── Media ─────────────────────────────────────────────────────────────────
   async function getLocalMedia() {
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       localVideo.srcObject = localStream;
     } catch (err) {
-      showToast('Camera/mic access denied. Please allow permissions and reload.');
-      console.error('getUserMedia error:', err);
+      showToast('Camera/mic access denied. Please allow and reload.');
+      console.error(err);
     }
   }
 
+  // ── Controls (tap / double-tap) ───────────────────────────────────────────
+  function toggleMute() {
+    audioMuted = !audioMuted;
+    if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = !audioMuted);
+    showIcon(audioMuted ? '🔇' : '🎤');
+  }
+
+  function toggleCamera() {
+    videoOff = !videoOff;
+    if (localStream) localStream.getVideoTracks().forEach(t => t.enabled = !videoOff);
+    showIcon(videoOff ? '📵' : '📷');
+  }
+
+  // Tap detection: single tap = mute, double tap = camera
+  let tapCount = 0;
+  let tapTimer  = null;
+
+  document.addEventListener('click', (e) => {
+    // Ignore clicks on the local PiP (accidental)
+    if (e.target.closest('#local-wrapper')) return;
+
+    tapCount++;
+    if (tapCount === 1) {
+      tapTimer = setTimeout(() => {
+        tapCount = 0;
+        toggleMute();
+      }, 260);
+    } else if (tapCount >= 2) {
+      clearTimeout(tapTimer);
+      tapCount = 0;
+      toggleCamera();
+    }
+  });
+
+  // ── WebRTC ────────────────────────────────────────────────────────────────
   function createPeerConnection() {
     pc = new RTCPeerConnection(STUN_SERVERS);
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-    localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
-
-    pc.ontrack = (event) => {
-      remoteVideo.srcObject = event.streams[0];
+    pc.ontrack = (e) => {
+      remoteVideo.srcObject = e.streams[0];
       waitingMsg.style.display = 'none';
     };
 
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.emit('ice-candidate', { roomId: FIXED_ROOM, candidate: event.candidate });
-      }
+    pc.onicecandidate = (e) => {
+      if (e.candidate) socket.emit('ice-candidate', { roomId: FIXED_ROOM, candidate: e.candidate });
     };
 
     pc.onconnectionstatechange = () => {
@@ -69,13 +108,7 @@
     };
   }
 
-  // Auto-join on load
-  window.addEventListener('DOMContentLoaded', async () => {
-    await getLocalMedia();
-    if (!localStream) return;
-    socket.emit('join-room', FIXED_ROOM);
-  });
-
+  // ── Socket signaling ──────────────────────────────────────────────────────
   socket.on('start-call', async () => {
     createPeerConnection();
     const offer = await pc.createOffer();
@@ -96,11 +129,8 @@
   });
 
   socket.on('ice-candidate', async ({ candidate }) => {
-    try {
-      await pc.addIceCandidate(new RTCIceCandidate(candidate));
-    } catch (e) {
-      console.error('ICE candidate error:', e);
-    }
+    try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); }
+    catch (e) { console.error(e); }
   });
 
   socket.on('peer-left', () => {
@@ -110,26 +140,11 @@
     if (pc) { pc.close(); pc = null; }
   });
 
-  socket.on('room-full', () => {
-    showToast('Room is busy — only 2 people allowed at a time.');
-  });
+  socket.on('room-full', () => showToast('Room is busy — only 2 people at a time.'));
 
-  muteBtn.addEventListener('click', () => {
-    audioMuted = !audioMuted;
-    localStream.getAudioTracks().forEach((t) => (t.enabled = !audioMuted));
-    setButtonActive(muteBtn, audioMuted, 'Mute', 'Unmute');
-  });
-
-  cameraBtn.addEventListener('click', () => {
-    videoOff = !videoOff;
-    localStream.getVideoTracks().forEach((t) => (t.enabled = !videoOff));
-    setButtonActive(cameraBtn, videoOff, 'Camera', 'Start Cam');
-  });
-
-  leaveBtn.addEventListener('click', () => {
-    if (localStream) localStream.getTracks().forEach((t) => t.stop());
-    if (pc) { pc.close(); pc = null; }
-    socket.disconnect();
-    location.reload();
+  // ── Start ─────────────────────────────────────────────────────────────────
+  window.addEventListener('DOMContentLoaded', async () => {
+    await getLocalMedia();
+    if (localStream) socket.emit('join-room', FIXED_ROOM);
   });
 })();
