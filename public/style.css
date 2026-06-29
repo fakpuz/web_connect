@@ -52,6 +52,19 @@ html, body {
 /* local self-view: mirrored */
 #local-panel video { transform: scaleX(-1); }
 
+/* ── Panel fullscreen (double-tap on panel) ──────────────────────────────── */
+.panel-focused {
+  /* position overridden via JS; just handle the video inside */
+  z-index: 900 !important;
+}
+.panel-focused video {
+  object-fit: contain !important;
+  background: #000 !important;
+}
+.panel-hidden {
+  display: none !important;
+}
+
 /* ── Waiting message ─────────────────────────────────────────────────────── */
 #waiting-msg {
   position: fixed;

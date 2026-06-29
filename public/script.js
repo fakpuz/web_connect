@@ -125,12 +125,49 @@
 
   localVideo.addEventListener('loadedmetadata', fitLocalPanel);
 
-  // ── Drag (1 pointer) + pinch-zoom (2 pointers) on every panel ────────────
+  // ── Panel focus (double-tap expands to full screen) ──────────────────────
+  let focusedPanel = null;
+
+  function togglePanelFocus(el) {
+    if (focusedPanel === el) {
+      // Exit focus: restore saved position/size
+      el.classList.remove('panel-focused');
+      if (el._saved) { Object.assign(el.style, el._saved); el._saved = null; }
+      document.querySelectorAll('.vid-panel').forEach(p => p.classList.remove('panel-hidden'));
+      focusedPanel = null;
+    } else {
+      // Exit any existing focus first
+      if (focusedPanel) togglePanelFocus(focusedPanel);
+      focusedPanel = el;
+      // Save current geometry
+      el._saved = { left: el.style.left, top: el.style.top,
+                    width: el.style.width, height: el.style.height,
+                    right: el.style.right, bottom: el.style.bottom,
+                    zIndex: el.style.zIndex };
+      // Expand to fill screen
+      Object.assign(el.style, {
+        left: '0px', top: '0px',
+        width: window.innerWidth  + 'px',
+        height: window.innerHeight + 'px',
+        right: 'auto', bottom: 'auto',
+        zIndex: ++zTop,
+      });
+      el.classList.add('panel-focused');
+      // Hide all other panels
+      document.querySelectorAll('.vid-panel').forEach(p => {
+        if (p !== el) p.classList.add('panel-hidden');
+      });
+    }
+  }
+
+  // ── Drag (1 pointer) + pinch-zoom (2 pointers) + double-tap focus ─────────
   function makeInteractive(el) {
     const pts = new Map(); // pointerId → {x, y}
     let mode = 'idle';     // 'drag' | 'pinch'
-    let ox = 0, oy = 0;   // drag offset
-    let pinchDist0 = 0, pinchW0 = 0, pinchH0 = 0; // pinch baseline
+    let ox = 0, oy = 0;
+    let pinchDist0 = 0, pinchW0 = 0, pinchH0 = 0;
+    let tapCount = 0, tapTimer = null;
+    let pressX = 0, pressY = 0, pressTime = 0, didMove = false;
 
     function pinchStart() {
       const [a, b] = [...pts.values()];
@@ -147,6 +184,8 @@
 
       if (pts.size === 1) {
         mode = 'drag';
+        pressX = e.clientX; pressY = e.clientY;
+        pressTime = Date.now(); didMove = false;
         const r = el.getBoundingClientRect();
         ox = e.clientX - r.left;
         oy = e.clientY - r.top;
@@ -160,6 +199,9 @@
       if (!pts.has(e.pointerId)) return;
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
+      const dx = e.clientX - pressX, dy = e.clientY - pressY;
+      if (dx*dx + dy*dy > 64) didMove = true;
+
       if (mode === 'drag') {
         const w = el.offsetWidth, h = el.offsetHeight, B = DRAG_BUFFER;
         const x = Math.max(B - w, Math.min(window.innerWidth  - B, e.clientX - ox));
@@ -167,33 +209,42 @@
         Object.assign(el.style, { left: x+'px', top: y+'px', right: 'auto', bottom: 'auto' });
       } else if (mode === 'pinch') {
         const [a, b] = [...pts.values()];
-        const dist   = Math.hypot(b.x - a.x, b.y - a.y);
-        const scale  = dist / pinchDist0;
-        const ratio  = pinchW0 / pinchH0;
-        const newW   = Math.max(80, Math.min(window.innerWidth * 1.8, pinchW0 * scale));
-        const newH   = newW / ratio;
-        // keep the panel centered on where it was
-        const cx = el.offsetLeft + el.offsetWidth  / 2;
-        const cy = el.offsetTop  + el.offsetHeight / 2;
+        const dist  = Math.hypot(b.x - a.x, b.y - a.y);
+        const scale = dist / pinchDist0;
+        const ratio = pinchW0 / pinchH0;
+        const newW  = Math.max(80, Math.min(window.innerWidth * 1.8, pinchW0 * scale));
+        const newH  = newW / ratio;
+        const cx    = el.offsetLeft + el.offsetWidth  / 2;
+        const cy    = el.offsetTop  + el.offsetHeight / 2;
         Object.assign(el.style, {
           width: newW+'px', height: newH+'px',
-          left: (cx - newW / 2)+'px', top: (cy - newH / 2)+'px',
+          left: (cx - newW/2)+'px', top: (cy - newH/2)+'px',
           right: 'auto', bottom: 'auto',
         });
       }
     });
 
     const onEnd = (e) => {
+      // Detect tap on single-finger lift
+      if (pts.size === 1 && !didMove && Date.now() - pressTime < 400) {
+        tapCount++;
+        clearTimeout(tapTimer);
+        if (tapCount >= 2) {
+          tapCount = 0;
+          togglePanelFocus(el);
+        } else {
+          tapTimer = setTimeout(() => { tapCount = 0; }, 350);
+        }
+      }
+
       pts.delete(e.pointerId);
       if (pts.size === 0) {
         mode = 'idle';
       } else if (pts.size === 1) {
-        // dropped back to one finger — switch to drag
         mode = 'drag';
-        const [pid, pos] = [...pts.entries()][0];
+        const [, pos] = [...pts.entries()][0];
         const r = el.getBoundingClientRect();
-        ox = pos.x - r.left;
-        oy = pos.y - r.top;
+        ox = pos.x - r.left; oy = pos.y - r.top;
       }
     };
     el.addEventListener('pointerup',     onEnd);
