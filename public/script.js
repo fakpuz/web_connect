@@ -122,11 +122,12 @@
 
     let text;
     if (voiceOnly) {
-      // I'm in voice-only: show full picture (I can't see anyone)
+      // I'm in voice-only: show what others are doing (don't count myself)
       const videoPeers = totalPeers - voicePeers;
       const parts = [];
-      if (videoPeers > 0)     parts.push(`📹 ${videoPeers} in video`);
-      parts.push(`🎙️ ${voicePeers + 1} in voice only`); // +1 = me
+      if (videoPeers > 0) parts.push(`📹 ${videoPeers} in video`);
+      if (voicePeers > 0) parts.push(`🎙️ ${voicePeers} other${voicePeers > 1 ? 's' : ''} in voice only`);
+      if (parts.length === 0) { statusBar.classList.add('hidden'); return; }
       text = parts.join('  ·  ');
     } else {
       // I'm in video: tell me how many others dropped to voice-only
