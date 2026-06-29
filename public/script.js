@@ -8,7 +8,10 @@
   const localPanel  = document.getElementById('local-panel');
   const localVideo  = document.getElementById('local-video');
   const waitingMsg  = document.getElementById('waiting-msg');
-  const gestureIcon = document.getElementById('gesture-icon');
+  const ctrlPanel   = document.getElementById('ctrl-panel');
+  const btnMic      = document.getElementById('btn-mic');
+  const btnCam      = document.getElementById('btn-cam');
+  const btnShare    = document.getElementById('btn-share');
   const toast       = document.getElementById('toast');
 
   let localStream = null;
@@ -25,14 +28,7 @@
     toast._t = setTimeout(() => toast.classList.add('hidden'), ms);
   }
 
-  function showIcon(emoji) {
-    gestureIcon.textContent = emoji;
-    gestureIcon.classList.remove('hidden', 'fade');
-    void gestureIcon.offsetWidth;
-    requestAnimationFrame(() => gestureIcon.classList.add('fade'));
-    clearTimeout(gestureIcon._t);
-    gestureIcon._t = setTimeout(() => gestureIcon.classList.add('hidden'), 650);
-  }
+  function showIcon(_emoji) {} // kept for call-sites; no-op now
 
   // ── Fit panel exactly to video's natural ratio — zero black bars ──────────
   // cell = {x, y, w, h} — the allocated screen region
@@ -244,7 +240,7 @@
       screenStream = null;
       localVideo.srcObject = localStream;
       replaceVideoTrack(localStream.getVideoTracks()[0]);
-      showIcon('📷');
+      updateCtrlUI();
       return;
     }
     try {
@@ -252,7 +248,7 @@
       const track  = screenStream.getVideoTracks()[0];
       localVideo.srcObject = new MediaStream([track, ...localStream.getAudioTracks()]);
       replaceVideoTrack(track);
-      showIcon('🖥️');
+      updateCtrlUI();
       track.onended = () => toggleScreenShare();
     } catch (_) {}
   }
@@ -264,50 +260,62 @@
     });
   }
 
-  // ── Gestures ──────────────────────────────────────────────────────────────
+  // ── Control panel ─────────────────────────────────────────────────────────
+  function updateCtrlUI() {
+    btnMic.querySelector('.ci').textContent  = audioMuted ? '🔇' : '🎤';
+    btnMic.querySelector('.cl').textContent  = audioMuted ? 'Unmute' : 'Mute';
+    btnMic.classList.toggle('off', audioMuted);
+    btnCam.querySelector('.ci').textContent  = videoOff ? '📵' : '📷';
+    btnCam.querySelector('.cl').textContent  = videoOff ? 'Cam off' : 'Camera';
+    btnCam.classList.toggle('off', videoOff);
+    btnShare.querySelector('.ci').textContent = screenStream ? '⏹️' : '🖥️';
+    btnShare.querySelector('.cl').textContent = screenStream ? 'Stop' : 'Share';
+  }
+
   function toggleMute() {
     audioMuted = !audioMuted;
     localStream?.getAudioTracks().forEach(t => t.enabled = !audioMuted);
-    showIcon(audioMuted ? '🔇' : '🎤');
+    updateCtrlUI();
   }
   function toggleCamera() {
     videoOff = !videoOff;
     localStream?.getVideoTracks().forEach(t => t.enabled = !videoOff);
-    showIcon(videoOff ? '📵' : '📷');
+    updateCtrlUI();
   }
 
+  btnMic.addEventListener('click',   () => { toggleMute();         });
+  btnCam.addEventListener('click',   () => { toggleCamera();       });
+  btnShare.addEventListener('click', () => { toggleScreenShare();  });
+
+  // Double-tap on background → open/close panel; single tap or vid-panel tap → ignore
   let tapCount = 0, tapTimer = null;
-  let pressTimer = null, longPressed = false;
   let pressX = 0, pressY = 0, pressTime = 0;
 
   document.addEventListener('contextmenu', e => e.preventDefault());
 
   document.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.vid-panel')) return;
+    // Tapping outside panel while it's open → close it
+    if (!ctrlPanel.classList.contains('hidden') && !e.target.closest('#ctrl-panel')) {
+      ctrlPanel.classList.add('hidden');
+      return;
+    }
+    if (e.target.closest('.vid-panel') || e.target.closest('#ctrl-panel')) return;
     pressX = e.clientX; pressY = e.clientY; pressTime = Date.now();
-    longPressed = false;
-    pressTimer  = setTimeout(() => { longPressed = true; toggleScreenShare(); }, 600);
   });
-
-  document.addEventListener('pointermove', (e) => {
-    if (e.target.closest('.vid-panel')) return;
-    const dx = e.clientX - pressX, dy = e.clientY - pressY;
-    if (dx * dx + dy * dy > 64) clearTimeout(pressTimer);
-  });
-
-  document.addEventListener('pointercancel', () => clearTimeout(pressTimer));
 
   document.addEventListener('pointerup', (e) => {
-    clearTimeout(pressTimer);
-    if (e.target.closest('.vid-panel')) return;
-    if (longPressed) { longPressed = false; return; }
+    if (e.target.closest('.vid-panel') || e.target.closest('#ctrl-panel')) return;
+    if (!ctrlPanel.classList.contains('hidden')) return; // already handled by pointerdown
     const dx = e.clientX - pressX, dy = e.clientY - pressY;
-    if (dx * dx + dy * dy > 64 || Date.now() - pressTime > 300) return;
+    if (dx * dx + dy * dy > 64 || Date.now() - pressTime > 400) return;
     tapCount++;
-    if (tapCount === 1) {
-      tapTimer = setTimeout(() => { tapCount = 0; toggleMute(); }, 260);
+    clearTimeout(tapTimer);
+    if (tapCount >= 2) {
+      tapCount = 0;
+      updateCtrlUI();
+      ctrlPanel.classList.remove('hidden');
     } else {
-      clearTimeout(tapTimer); tapCount = 0; toggleCamera();
+      tapTimer = setTimeout(() => { tapCount = 0; }, 350);
     }
   });
 

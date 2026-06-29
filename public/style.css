@@ -65,23 +65,42 @@ html, body {
   pointer-events: none;
 }
 
-/* ── Gesture icon ────────────────────────────────────────────────────────── */
-#gesture-icon {
+/* ── Control panel (opens on double-tap) ─────────────────────────────────── */
+#ctrl-panel {
   position: fixed;
-  top: 50%;
+  bottom: 10%;
   left: 50%;
-  transform: translate(-50%, -50%) scale(1);
-  font-size: 72px;
-  z-index: 100;
-  pointer-events: none;
-  opacity: 1;
-  transition: opacity 0.5s ease, transform 0.5s ease;
-  filter: drop-shadow(0 2px 16px rgba(0,0,0,0.9));
+  transform: translateX(-50%);
+  display: flex;
+  gap: 16px;
+  background: rgba(14, 14, 26, 0.94);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 28px;
+  padding: 18px 28px;
+  z-index: 500;
+  box-shadow: 0 8px 48px rgba(0,0,0,0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
-#gesture-icon.fade {
-  opacity: 0;
-  transform: translate(-50%, -50%) scale(1.5);
+.ctrl-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 10px 14px;
+  border-radius: 16px;
+  transition: background 0.15s;
+  color: #e8e8f0;
+  min-width: 64px;
+  touch-action: manipulation;
 }
+.ctrl-btn:hover, .ctrl-btn:active { background: rgba(255,255,255,0.1); }
+.ctrl-btn.off { opacity: 0.45; }
+.ci { font-size: 32px; line-height: 1; }
+.cl { font-size: 11px; letter-spacing: 0.03em; opacity: 0.7; }
 
 /* ── Toast ───────────────────────────────────────────────────────────────── */
 #toast {
