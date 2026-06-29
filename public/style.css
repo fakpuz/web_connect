@@ -49,8 +49,8 @@ html, body {
   /* no object-fit, no background — panel is sized exactly to video ratio */
 }
 
-/* local self-view: mirrored */
-#local-panel video { transform: scaleX(-1); }
+/* local self-view: no mirror — shows what others actually see */
+#local-panel video { transform: none; }
 
 /* ── Panel fullscreen (double-tap on panel) ──────────────────────────────── */
 .panel-focused {
