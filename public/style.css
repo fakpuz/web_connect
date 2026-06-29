@@ -114,30 +114,6 @@ html, body {
 .vo-label { font-size: 26px; font-weight: 500; color: rgba(255,255,255,0.75); letter-spacing: 0.06em; }
 .vo-hint  { font-size: 13px; color: rgba(255,255,255,0.3); margin-top: 4px; }
 
-/* ── Voice-only peer indicators ──────────────────────────────────────────── */
-#voice-indicators {
-  position: fixed;
-  left: 14px;
-  bottom: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  z-index: 30;
-  pointer-events: none;
-}
-.voice-bubble {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  background: rgba(14, 14, 26, 0.88);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 20px;
-  padding: 6px 14px 6px 10px;
-  color: #e8e8f0;
-  font-size: 13px;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
 
 /* ── Control panel (opens on double-tap) ─────────────────────────────────── */
 #ctrl-panel {

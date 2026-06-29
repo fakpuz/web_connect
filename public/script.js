@@ -129,8 +129,8 @@
       parts.push(`🎙️ ${voicePeers + 1} in voice only`); // +1 = me
       text = parts.join('  ·  ');
     } else {
-      // I'm in video: just tell me how many dropped to voice-only
-      text = `🎙️ ${voicePeers} in voice only`;
+      // I'm in video: tell me how many others dropped to voice-only
+      text = `🎙️ ${voicePeers} other${voicePeers > 1 ? 's' : ''} in voice only`;
     }
 
     statusBar.textContent = text;
@@ -338,9 +338,7 @@
     peers[peerId]?.panel?.remove();
     peers[peerId]?.pc?.close();
     delete peers[peerId];
-    delete peerNumbers[peerId];
     layoutRemoteVideos();
-    updateVoiceIndicators();
   }
 
   // ── WebRTC ────────────────────────────────────────────────────────────────
@@ -402,38 +400,15 @@
     layoutRemoteVideos();
   });
 
-  // ── Voice-only peer indicators ────────────────────────────────────────────
-  const statusBar       = document.getElementById('status-bar');
-  const voiceOverlay    = document.getElementById('voice-overlay');
-  const voiceIndicators = document.getElementById('voice-indicators');
-
+  const statusBar    = document.getElementById('status-bar');
+  const voiceOverlay = document.getElementById('voice-overlay');
   voiceOverlay.addEventListener('click', () => { if (voiceOnly) toggleVoiceOnly(); });
-  let peerNumbers = {}; // peerId → display number
-  let peerCounter = 0;
 
-  function getPeerNumber(id) {
-    if (!peerNumbers[id]) peerNumbers[id] = ++peerCounter;
-    return peerNumbers[id];
-  }
-
-  function updateVoiceIndicators() {
-    voiceIndicators.innerHTML = '';
-    Object.entries(peers).forEach(([id, p]) => {
-      if (!p.wantsVoiceOnly) return;
-      const el = document.createElement('div');
-      el.className = 'voice-bubble';
-      el.textContent = `🎙️  Person ${getPeerNumber(id)} — voice only`;
-      voiceIndicators.appendChild(el);
-    });
-  }
-
-  // Peer wants voice-only: stop sending video to them (saves their bandwidth)
   socket.on('voice-only', ({ from }) => {
     const peer = peers[from];
     if (!peer) return;
     peer.wantsVoiceOnly = true;
     if (peer.videoSender) peer.videoSender.replaceTrack(null);
-    updateVoiceIndicators();
     layoutRemoteVideos();
   });
 
@@ -445,7 +420,6 @@
       const track = (screenStream || localStream)?.getVideoTracks()[0];
       if (track) peer.videoSender.replaceTrack(track);
     }
-    updateVoiceIndicators();
     layoutRemoteVideos();
   });
 
