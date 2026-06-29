@@ -89,12 +89,15 @@
   }
 
   function layoutRemoteVideos() {
-    const entries = Object.entries(peers).filter(([, p]) => p.panel);
-    const n = entries.length;
+    // Only layout peers whose camera is on
+    const all     = Object.entries(peers).filter(([, p]) => p.panel);
+    const visible = all.filter(([, p]) => !p.cameraOff);
+    all.forEach(([, p]) => { if (p.panel) p.panel.style.display = p.cameraOff ? 'none' : ''; });
+    const n = visible.length;
     waitingMsg.style.display = n === 0 ? 'flex' : 'none';
     if (n === 0) return;
     const positions = computeLayout(n);
-    entries.forEach(([id, peer], i) => {
+    visible.forEach(([id, peer], i) => {
       peer.cell = positions[i];
       fitToRatio(peer.panel, peer.video, peer.cell);
     });
@@ -227,6 +230,12 @@
     catch (_) {}
   });
 
+  socket.on('camera-state', ({ from, videoOff: off }) => {
+    if (!peers[from]) return;
+    peers[from].cameraOff = off;
+    layoutRemoteVideos();
+  });
+
   socket.on('peer-left',  (id) => { removeRemotePanel(id); showToast('Someone left.'); });
   socket.on('room-full',  ()   => showToast('Room is full (max 4 people).'));
 
@@ -280,6 +289,7 @@
   function toggleCamera() {
     videoOff = !videoOff;
     localStream?.getVideoTracks().forEach(t => t.enabled = !videoOff);
+    socket.emit('camera-state', { videoOff });
     updateCtrlUI();
   }
 
