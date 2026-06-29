@@ -20,62 +20,38 @@ html, body {
   height: 100%;
 }
 
-/* ── Remote video cells — fixed, draggable ───────────────────────────────── */
-.remote-cell {
+/* ── Every video panel — remote and local — same treatment ───────────────── */
+.vid-panel {
   position: fixed;
-  overflow: hidden;
   cursor: grab;
   touch-action: none;
-  z-index: 5;
-  background: #111;
-}
-.remote-cell:active { cursor: grabbing; }
-.remote-cell video {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-  pointer-events: none;
-}
-
-/* ── Self view — natural size, no crop, soft edge shadow ─────────────────── */
-#local-wrapper {
-  position: fixed;
-  bottom: 2%;
-  right: 2%;
-  width: 22%;
-  max-width: 200px;
-  min-width: 80px;
-  /* no aspect-ratio — wrapper follows video's natural dimensions */
-  border-radius: 6px;
+  box-shadow: 0 4px 28px rgba(0,0,0,0.85);
+  z-index: 10;
   overflow: hidden;
-  background: transparent;
-  /* outer glow */
-  box-shadow: 0 4px 24px rgba(0,0,0,0.8);
-  z-index: 20;
-  cursor: grab;
-  touch-action: none;
 }
-#local-wrapper:active { cursor: grabbing; }
+.vid-panel:active { cursor: grabbing; }
 
-/* inset shadow — darkens the periphery of the video slightly */
-#local-wrapper::after {
+/* soft inset shadow at edges */
+.vid-panel::after {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 6px;
-  box-shadow: inset 0 0 18px rgba(0,0,0,0.45);
+  box-shadow: inset 0 0 22px rgba(0,0,0,0.5);
   pointer-events: none;
   z-index: 1;
 }
 
-#local-video {
+.vid-panel video {
   width: 100%;
-  height: auto;      /* natural height — no fixed ratio, no crop */
+  height: 100%;
+  object-fit: contain;
+  background: #000;
   display: block;
-  background: transparent;
-  transform: scaleX(-1);
+  pointer-events: none;
 }
+
+/* local self-view: mirrored */
+#local-panel video { transform: scaleX(-1); }
 
 /* ── Waiting message ─────────────────────────────────────────────────────── */
 #waiting-msg {
@@ -84,7 +60,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #555;
+  color: #444;
   font-size: 15px;
   z-index: 4;
   pointer-events: none;
