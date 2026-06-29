@@ -44,10 +44,9 @@ html, body {
 .vid-panel video {
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  background: #000;
   display: block;
   pointer-events: none;
+  /* no object-fit, no background — panel is sized exactly to video ratio */
 }
 
 /* local self-view: mirrored */

@@ -1,8 +1,8 @@
 (() => {
   const FIXED_ROOM  = 'main';
   const STUN        = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] };
-  const DRAG_BUFFER = 40;     // min px that must stay on-screen for any panel
-  const LOCAL_SIZE  = 0.22;   // self-view = 22% of screen width
+  const DRAG_BUFFER = 40;
+  const LOCAL_SIZE  = 0.22;
 
   const app         = document.getElementById('app');
   const localPanel  = document.getElementById('local-panel');
@@ -15,7 +15,7 @@
   let audioMuted  = false;
   let videoOff    = false;
   const socket    = io();
-  const peers     = {}; // peerId -> { pc, panel, video }
+  const peers     = {}; // peerId -> { pc, panel, video, cell }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   function showToast(msg, ms = 3000) {
@@ -34,55 +34,60 @@
     gestureIcon._t = setTimeout(() => gestureIcon.classList.add('hidden'), 650);
   }
 
-  // ── Smart layout ──────────────────────────────────────────────────────────
-  // Score a cell: how much of it can a 16:9 video fill?
+  // ── Fit panel exactly to video's natural ratio — zero black bars ──────────
+  // cell = {x, y, w, h} — the allocated screen region
+  // The panel is sized to the largest rect that fits in cell at the video's ratio,
+  // then centered. This means pure video pixels fill the panel; no letterbox.
+  function fitToRatio(panel, video, cell) {
+    const ratio = (video.videoWidth && video.videoHeight)
+      ? video.videoWidth / video.videoHeight
+      : 16 / 9;
+    const { x, y, w, h } = cell;
+    let pw, ph;
+    if (w / h >= ratio) { ph = h; pw = ph * ratio; }
+    else                 { pw = w; ph = pw / ratio; }
+    Object.assign(panel.style, {
+      left:   (x + (w - pw) / 2) + 'px',
+      top:    (y + (h - ph) / 2) + 'px',
+      width:  pw + 'px',
+      height: ph + 'px',
+      right:  'auto',
+      bottom: 'auto',
+    });
+  }
+
+  // ── Smart layout — returns [{x,y,w,h}] for n slots ───────────────────────
   function videoScore(cw, ch) {
     const R = 16 / 9;
     return Math.min(cw, ch * R) * Math.min(ch, cw / R);
   }
 
-  // Return [{x,y,w,h}] for n remote videos, picking the best arrangement
   function computeLayout(n) {
-    const W = window.innerWidth;
-    const H = window.innerHeight;
-
+    const W = window.innerWidth, H = window.innerHeight;
     if (n === 0) return [];
     if (n === 1) return [{ x: 0, y: 0, w: W, h: H }];
 
     const candidates = [];
 
-    // Uniform grids: try all cols that divide evenly
     for (let cols = 1; cols <= n; cols++) {
       if (n % cols !== 0) continue;
       const rows = n / cols;
       const cw = W / cols, ch = H / rows;
-      const score = videoScore(cw, ch);
       const pos = [];
       for (let i = 0; i < n; i++)
         pos.push({ x: (i % cols) * cw, y: Math.floor(i / cols) * ch, w: cw, h: ch });
-      candidates.push({ score, pos });
+      candidates.push({ score: videoScore(cw, ch), pos });
     }
 
-    // For n=3: try uneven splits
     if (n === 3) {
-      const layouts3 = [
-        // 2 top + 1 bottom full-width
-        [{ x:0, y:0, w:W/2, h:H*2/3 }, { x:W/2, y:0,    w:W/2, h:H*2/3 }, { x:0, y:H*2/3, w:W,   h:H/3   }],
-        // 1 top full-width + 2 bottom
-        [{ x:0, y:0, w:W,   h:H/3   }, { x:0,   y:H/3,  w:W/2, h:H*2/3 }, { x:W/2, y:H/3, w:W/2, h:H*2/3 }],
-        // 1 left full-height + 2 right stacked
-        [{ x:0, y:0, w:W/2, h:H     }, { x:W/2, y:0,    w:W/2, h:H/2   }, { x:W/2, y:H/2, w:W/2, h:H/2   }],
-        // 2 left stacked + 1 right full-height
-        [{ x:0, y:0, w:W/2, h:H/2   }, { x:0,   y:H/2,  w:W/2, h:H/2   }, { x:W/2, y:0,   w:W/2, h:H     }],
-      ];
-      layouts3.forEach(pos => {
-        // score = area of the smallest video (bottleneck)
-        const score = Math.min(...pos.map(p => videoScore(p.w, p.h)));
-        candidates.push({ score, pos });
-      });
+      [
+        [{ x:0, y:0, w:W/2, h:H*2/3 }, { x:W/2, y:0,   w:W/2, h:H*2/3 }, { x:0, y:H*2/3, w:W,   h:H/3   }],
+        [{ x:0, y:0, w:W,   h:H/3   }, { x:0,   y:H/3, w:W/2, h:H*2/3 }, { x:W/2, y:H/3, w:W/2, h:H*2/3 }],
+        [{ x:0, y:0, w:W/2, h:H     }, { x:W/2, y:0,   w:W/2, h:H/2   }, { x:W/2, y:H/2, w:W/2, h:H/2   }],
+        [{ x:0, y:0, w:W/2, h:H/2   }, { x:0,   y:H/2, w:W/2, h:H/2   }, { x:W/2, y:0,   w:W/2, h:H     }],
+      ].forEach(pos => candidates.push({ score: Math.min(...pos.map(p => videoScore(p.w, p.h))), pos }));
     }
 
-    // Pick best
     candidates.sort((a, b) => b.score - a.score);
     return candidates[0].pos;
   }
@@ -92,53 +97,46 @@
     const n = entries.length;
     waitingMsg.style.display = n === 0 ? 'flex' : 'none';
     if (n === 0) return;
-
     const positions = computeLayout(n);
-    entries.forEach(([, peer], i) => {
-      const p = positions[i];
-      Object.assign(peer.panel.style, {
-        left: p.x + 'px', top: p.y + 'px',
-        width: p.w + 'px', height: p.h + 'px',
-        right: 'auto', bottom: 'auto',
-      });
+    entries.forEach(([id, peer], i) => {
+      peer.cell = positions[i];
+      fitToRatio(peer.panel, peer.video, peer.cell);
     });
   }
 
-  window.addEventListener('resize', () => {
-    layoutRemoteVideos();
-    placeLocalPanel();
-  });
+  window.addEventListener('resize', () => { layoutRemoteVideos(); fitLocalPanel(); });
 
-  // ── Local panel initial placement ─────────────────────────────────────────
-  function placeLocalPanel() {
+  // ── Local panel ───────────────────────────────────────────────────────────
+  function fitLocalPanel() {
     const W = window.innerWidth;
-    const H = window.innerHeight;
     const w = Math.min(Math.max(W * LOCAL_SIZE, 80), 200);
-    const h = w * 9 / 16;
-    Object.assign(localPanel.style, {
-      width:  w + 'px',
-      height: h + 'px',
-      right:  '2%',
-      bottom: '2%',
-      left:   'auto',
-      top:    'auto',
-    });
+    // use actual camera ratio if available, else 4:3
+    const ratio = (localVideo.videoWidth && localVideo.videoHeight)
+      ? localVideo.videoWidth / localVideo.videoHeight
+      : 4 / 3;
+    const h = w / ratio;
+    // only reposition if not manually dragged (top/left still 'auto')
+    const hasBeenDragged = localPanel.style.left && localPanel.style.left !== 'auto';
+    Object.assign(localPanel.style, { width: w + 'px', height: h + 'px' });
+    if (!hasBeenDragged) {
+      Object.assign(localPanel.style, { right: '2%', bottom: '2%', left: 'auto', top: 'auto' });
+    }
   }
 
-  // ── Universal drag — all vid-panels, can go partially off-screen ──────────
+  localVideo.addEventListener('loadedmetadata', fitLocalPanel);
+
+  // ── Universal drag ────────────────────────────────────────────────────────
   function makeDraggable(el) {
     let dragging = false, ox = 0, oy = 0;
-
     el.addEventListener('pointerdown', (e) => {
       dragging = true;
       el.setPointerCapture(e.pointerId);
       const r = el.getBoundingClientRect();
       ox = e.clientX - r.left;
       oy = e.clientY - r.top;
-      el.style.zIndex = 50; // bring to front while dragging
+      el.style.zIndex = 50;
       e.stopPropagation();
     });
-
     el.addEventListener('pointermove', (e) => {
       if (!dragging) return;
       const w = el.offsetWidth, h = el.offsetHeight;
@@ -147,7 +145,6 @@
       const y = Math.max(B - h, Math.min(window.innerHeight - B, e.clientY - oy));
       Object.assign(el.style, { left: x+'px', top: y+'px', right: 'auto', bottom: 'auto' });
     });
-
     el.addEventListener('pointerup',    () => { dragging = false; el.style.zIndex = ''; });
     el.addEventListener('pointercancel',() => { dragging = false; el.style.zIndex = ''; });
   }
@@ -165,7 +162,15 @@
     if (!peers[peerId]) peers[peerId] = {};
     peers[peerId].panel = panel;
     peers[peerId].video = video;
+    peers[peerId].cell  = { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight };
     makeDraggable(panel);
+    // Re-fit when we learn the real video ratio
+    video.addEventListener('loadedmetadata', () => {
+      if (peers[peerId]?.cell) fitToRatio(panel, video, peers[peerId].cell);
+    });
+    video.addEventListener('resize', () => {
+      if (peers[peerId]?.cell) fitToRatio(panel, video, peers[peerId].cell);
+    });
     layoutRemoteVideos();
   }
 
@@ -181,18 +186,14 @@
     const pc = new RTCPeerConnection(STUN);
     if (!peers[peerId]) peers[peerId] = {};
     peers[peerId].pc = pc;
-
     localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-
     pc.ontrack = (e) => {
       if (!peers[peerId]?.panel) addRemotePanel(peerId);
       peers[peerId].video.srcObject = e.streams[0];
     };
-
     pc.onicecandidate = (e) => {
       if (e.candidate) socket.emit('ice-candidate', { to: peerId, candidate: e.candidate });
     };
-
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected')
         removeRemotePanel(peerId);
@@ -227,7 +228,7 @@
 
   socket.on('ice-candidate', async ({ from, candidate }) => {
     try { await peers[from]?.pc.addIceCandidate(new RTCIceCandidate(candidate)); }
-    catch (e) { console.error(e); }
+    catch (_) {}
   });
 
   socket.on('peer-left',  (id) => { removeRemotePanel(id); showToast('Someone left.'); });
@@ -263,7 +264,7 @@
     });
   }
 
-  // ── Gesture detection — tap / double-tap / long-press ─────────────────────
+  // ── Gestures ──────────────────────────────────────────────────────────────
   function toggleMute() {
     audioMuted = !audioMuted;
     localStream?.getAudioTracks().forEach(t => t.enabled = !audioMuted);
@@ -282,7 +283,7 @@
   document.addEventListener('contextmenu', e => e.preventDefault());
 
   document.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.vid-panel')) return; // panels handle their own events
+    if (e.target.closest('.vid-panel')) return;
     pressX = e.clientX; pressY = e.clientY; pressTime = Date.now();
     longPressed = false;
     pressTimer  = setTimeout(() => { longPressed = true; toggleScreenShare(); }, 600);
@@ -300,25 +301,20 @@
     clearTimeout(pressTimer);
     if (e.target.closest('.vid-panel')) return;
     if (longPressed) { longPressed = false; return; }
-
     const dx = e.clientX - pressX, dy = e.clientY - pressY;
     if (dx * dx + dy * dy > 64 || Date.now() - pressTime > 300) return;
-
     tapCount++;
     if (tapCount === 1) {
       tapTimer = setTimeout(() => { tapCount = 0; toggleMute(); }, 260);
     } else {
-      clearTimeout(tapTimer);
-      tapCount = 0;
-      toggleCamera();
+      clearTimeout(tapTimer); tapCount = 0; toggleCamera();
     }
   });
 
   // ── Boot ──────────────────────────────────────────────────────────────────
   window.addEventListener('DOMContentLoaded', async () => {
-    placeLocalPanel();
+    fitLocalPanel();
     makeDraggable(localPanel);
-
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       localVideo.srcObject = localStream;
