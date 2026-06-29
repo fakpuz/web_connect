@@ -488,10 +488,6 @@
 
   // ── Boot ──────────────────────────────────────────────────────────────────
   window.addEventListener('DOMContentLoaded', async () => {
-    // Screen share is desktop-only — no mobile browser supports getDisplayMedia
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isMobile) btnShare.style.display = 'none';
-
     fitLocalPanel();
     makeInteractive(localPanel);
     try {
