@@ -370,24 +370,38 @@
   // ── Screen share ──────────────────────────────────────────────────────────
   let screenStream = null;
 
+  function stopScreenShare() {
+    if (!screenStream) return;
+    screenStream.getTracks().forEach(t => t.stop());
+    screenStream = null;
+    localVideo.srcObject = localStream;
+    const camTrack = localStream?.getVideoTracks()[0];
+    if (camTrack) replaceVideoTrack(camTrack);
+    updateCtrlUI();
+  }
+
   async function toggleScreenShare() {
-    if (!navigator.mediaDevices?.getDisplayMedia) return;
-    if (screenStream) {
-      screenStream.getTracks().forEach(t => t.stop());
-      screenStream = null;
-      localVideo.srcObject = localStream;
-      replaceVideoTrack(localStream.getVideoTracks()[0]);
-      updateCtrlUI();
+    if (screenStream) { stopScreenShare(); return; }
+
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      showToast('Screen share is not supported on this browser');
       return;
     }
     try {
-      screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      const track  = screenStream.getVideoTracks()[0];
-      localVideo.srcObject = new MediaStream([track, ...localStream.getAudioTracks()]);
+      screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 30 } },
+        audio: false,
+      });
+      const track = screenStream.getVideoTracks()[0];
+      localVideo.srcObject = new MediaStream([track, ...(localStream?.getAudioTracks() ?? [])]);
       replaceVideoTrack(track);
       updateCtrlUI();
-      track.onended = () => toggleScreenShare();
-    } catch (_) {}
+      track.onended = stopScreenShare; // user pressed browser's native "stop sharing"
+    } catch (err) {
+      screenStream = null;
+      updateCtrlUI();
+      if (err.name !== 'NotAllowedError') showToast('Screen share failed: ' + (err.message || err.name));
+    }
   }
 
   function replaceVideoTrack(newTrack) {
