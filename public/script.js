@@ -373,7 +373,10 @@
   });
 
   // ── Voice-only peer indicators ────────────────────────────────────────────
+  const voiceOverlay    = document.getElementById('voice-overlay');
   const voiceIndicators = document.getElementById('voice-indicators');
+
+  voiceOverlay.addEventListener('click', () => { if (voiceOnly) toggleVoiceOnly(); });
   let peerNumbers = {}; // peerId → display number
   let peerCounter = 0;
 
@@ -496,6 +499,7 @@
         const track = localStream?.getVideoTracks()[0];
         if (track) p.videoSender.replaceTrack(track);
       });
+      voiceOverlay.classList.add('hidden');
       layoutRemoteVideos();
       updateCtrlUI();
       return;
@@ -530,6 +534,7 @@
         });
       }
     }
+    voiceOverlay.classList.toggle('hidden', !voiceOnly);
     layoutRemoteVideos();
     updateCtrlUI();
   }

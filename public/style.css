@@ -78,6 +78,23 @@ html, body {
   pointer-events: none;
 }
 
+/* ── Voice-only fullscreen overlay (tap to exit) ────────────────────────── */
+#voice-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.vo-icon  { font-size: 88px; line-height: 1; }
+.vo-label { font-size: 26px; font-weight: 500; color: rgba(255,255,255,0.75); letter-spacing: 0.06em; }
+.vo-hint  { font-size: 13px; color: rgba(255,255,255,0.3); margin-top: 4px; }
+
 /* ── Voice-only peer indicators ──────────────────────────────────────────── */
 #voice-indicators {
   position: fixed;
