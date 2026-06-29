@@ -6,7 +6,6 @@
   const localVideo  = document.getElementById('local-video');
   const waitingMsg  = document.getElementById('waiting-msg');
   const gestureIcon = document.getElementById('gesture-icon');
-  const shareBtn    = document.getElementById('share-btn');
   const toast       = document.getElementById('toast');
 
   let localStream = null;
@@ -148,36 +147,26 @@
   // ── Screen share ──────────────────────────────────────────────────────────
   let screenStream = null;
 
-  shareBtn.addEventListener('click', async () => {
+  async function toggleScreenShare() {
     if (screenStream) {
-      // Stop screen share, switch back to camera
       screenStream.getTracks().forEach(t => t.stop());
       screenStream = null;
-      shareBtn.classList.remove('active');
-      const camTrack = localStream.getVideoTracks()[0];
       localVideo.srcObject = localStream;
-      replaceVideoTrack(camTrack);
+      replaceVideoTrack(localStream.getVideoTracks()[0]);
+      showIcon('📷');
       return;
     }
-
     try {
       screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
       const screenTrack = screenStream.getVideoTracks()[0];
-
-      // Show screen in local preview
-      const previewStream = new MediaStream([screenTrack, ...localStream.getAudioTracks()]);
-      localVideo.srcObject = previewStream;
-
-      // Replace video track in all peer connections
+      localVideo.srcObject = new MediaStream([screenTrack, ...localStream.getAudioTracks()]);
       replaceVideoTrack(screenTrack);
-      shareBtn.classList.add('active');
-
-      // Auto-stop when user clicks browser's "Stop sharing"
-      screenTrack.onended = () => shareBtn.click();
+      showIcon('🖥️');
+      screenTrack.onended = () => toggleScreenShare();
     } catch (e) {
-      if (e.name !== 'NotAllowedError') showToast('Screen share failed.');
+      if (e.name !== 'NotAllowedError') showToast('Screen share not available.');
     }
-  });
+  }
 
   function replaceVideoTrack(newTrack) {
     Object.values(peers).forEach(({ pc }) => {
@@ -187,9 +176,35 @@
     });
   }
 
-  let tapCount = 0, tapTimer = null;
+  // ── Gesture detection: tap / double-tap / long-press ─────────────────────
+  let tapCount    = 0;
+  let tapTimer    = null;
+  let pressTimer  = null;
+  let longPressed = false;
+
+  // Prevent context menu on long press (mobile)
+  document.addEventListener('contextmenu', e => e.preventDefault());
+
+  document.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('#local-wrapper')) return;
+    longPressed = false;
+    pressTimer = setTimeout(() => {
+      longPressed = true;
+      toggleScreenShare();
+    }, 600);
+  });
+
+  document.addEventListener('pointerup', () => clearTimeout(pressTimer));
+  document.addEventListener('pointercancel', () => clearTimeout(pressTimer));
+
+  // Small movement during hold cancels long press (prevents accidental trigger on scroll)
+  document.addEventListener('pointermove', (e) => {
+    if (e.movementX ** 2 + e.movementY ** 2 > 100) clearTimeout(pressTimer);
+  });
+
   document.addEventListener('click', (e) => {
     if (e.target.closest('#local-wrapper')) return;
+    if (longPressed) { longPressed = false; return; } // swallow click after long press
     tapCount++;
     if (tapCount === 1) {
       tapTimer = setTimeout(() => { tapCount = 0; toggleMute(); }, 260);
