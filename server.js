@@ -41,7 +41,9 @@ io.on('connection', (socket) => {
   socket.on('offer',         ({ to, sdp })       => io.to(to).emit('offer',         { from: socket.id, sdp }));
   socket.on('answer',        ({ to, sdp })        => io.to(to).emit('answer',        { from: socket.id, sdp }));
   socket.on('ice-candidate', ({ to, candidate })  => io.to(to).emit('ice-candidate', { from: socket.id, candidate }));
-  socket.on('camera-state',  (data)              => socket.to(socket.data.roomId).emit('camera-state', { from: socket.id, ...data }));
+  socket.on('camera-state',  (data)              => socket.to(socket.data.roomId).emit('camera-state',  { from: socket.id, ...data }));
+  socket.on('voice-only',    ()                  => socket.to(socket.data.roomId).emit('voice-only',    { from: socket.id }));
+  socket.on('voice-only-off',()                  => socket.to(socket.data.roomId).emit('voice-only-off',{ from: socket.id }));
 
   socket.on('disconnect', () => {
     const roomId = socket.data.roomId;

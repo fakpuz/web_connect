@@ -11,12 +11,14 @@
   const ctrlPanel   = document.getElementById('ctrl-panel');
   const btnMic      = document.getElementById('btn-mic');
   const btnCam      = document.getElementById('btn-cam');
+  const btnVoice    = document.getElementById('btn-voice');
   const btnShare    = document.getElementById('btn-share');
   const toast       = document.getElementById('toast');
 
   let localStream = null;
   let audioMuted  = false;
   let videoOff    = false;
+  let voiceOnly   = false;
   const socket    = io();
   const peers     = {}; // peerId -> { pc, panel, video, cell }
   let   zTop      = 10; // increments on every touch; touched panel always wins
@@ -92,7 +94,7 @@
   function layoutRemoteVideos() {
     // Only layout peers whose camera is on
     const all     = Object.entries(peers).filter(([, p]) => p.panel);
-    const visible = all.filter(([, p]) => !p.cameraOff);
+    const visible = all.filter(([, p]) => !p.cameraOff && !voiceOnly);
     all.forEach(([, p]) => { if (p.panel) p.panel.style.display = p.cameraOff ? 'none' : ''; });
     const n = visible.length;
     waitingMsg.style.display = n === 0 ? 'flex' : 'none';
@@ -313,7 +315,10 @@
     const pc = new RTCPeerConnection(STUN);
     if (!peers[peerId]) peers[peerId] = {};
     peers[peerId].pc = pc;
-    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+    localStream.getTracks().forEach(t => {
+      const sender = pc.addTrack(t, localStream);
+      if (t.kind === 'video') peers[peerId].videoSender = sender;
+    });
     pc.ontrack = (e) => {
       if (!peers[peerId]?.panel) addRemotePanel(peerId);
       peers[peerId].video.srcObject = e.streams[0];
@@ -364,6 +369,25 @@
     layoutRemoteVideos();
   });
 
+  // Peer wants voice-only: stop sending video to them (saves their bandwidth)
+  socket.on('voice-only', ({ from }) => {
+    const peer = peers[from];
+    if (!peer?.videoSender) return;
+    peer.videoSender.replaceTrack(null);
+    peer.wantsVoiceOnly = true;
+  });
+
+  // Peer resumed video: send them our video track again
+  socket.on('voice-only-off', ({ from }) => {
+    const peer = peers[from];
+    if (!peer?.videoSender) return;
+    peer.wantsVoiceOnly = false;
+    if (!videoOff) {
+      const track = (screenStream || localStream)?.getVideoTracks()[0];
+      if (track) peer.videoSender.replaceTrack(track);
+    }
+  });
+
   socket.on('peer-left',  (id) => { removeRemotePanel(id); showToast('Someone left.'); });
   socket.on('room-full',  ()   => showToast('Room is full (max 4 people).'));
 
@@ -406,9 +430,9 @@
   }
 
   function replaceVideoTrack(newTrack) {
-    Object.values(peers).forEach(({ pc }) => {
-      const sender = pc?.getSenders().find(s => s.track?.kind === 'video');
-      if (sender) sender.replaceTrack(newTrack);
+    Object.values(peers).forEach((peer) => {
+      if (peer.wantsVoiceOnly) return; // don't send video to peers who asked not to receive it
+      if (peer.videoSender) peer.videoSender.replaceTrack(newTrack);
     });
   }
 
@@ -420,6 +444,9 @@
     btnCam.querySelector('.ci').textContent  = videoOff ? '📵' : '📷';
     btnCam.querySelector('.cl').textContent  = videoOff ? 'Cam off' : 'Camera';
     btnCam.classList.toggle('off', videoOff);
+    btnVoice.querySelector('.ci').textContent = voiceOnly ? '🔇' : '🎙️';
+    btnVoice.querySelector('.cl').textContent = 'Voice only';
+    btnVoice.classList.toggle('active', voiceOnly);
     btnShare.querySelector('.ci').textContent = screenStream ? '⏹️' : '🖥️';
     btnShare.querySelector('.cl').textContent = screenStream ? 'Stop' : 'Share';
   }
@@ -436,9 +463,25 @@
     updateCtrlUI();
   }
 
-  btnMic.addEventListener('click',   () => { toggleMute();         });
-  btnCam.addEventListener('click',   () => { toggleCamera();       });
-  btnShare.addEventListener('click', () => { toggleScreenShare();  });
+  function toggleVoiceOnly() {
+    voiceOnly = !voiceOnly;
+    if (voiceOnly) {
+      // Force camera off
+      if (!videoOff) toggleCamera();
+      // Tell all peers to stop sending video to me
+      socket.emit('voice-only');
+    } else {
+      // Tell all peers to resume sending video to me
+      socket.emit('voice-only-off');
+    }
+    layoutRemoteVideos();
+    updateCtrlUI();
+  }
+
+  btnMic.addEventListener('click',   () => { toggleMute();        });
+  btnCam.addEventListener('click',   () => { toggleCamera();      });
+  btnVoice.addEventListener('click', () => { toggleVoiceOnly();   });
+  btnShare.addEventListener('click', () => { toggleScreenShare(); });
 
   // Double-tap on background → open/close panel; single tap or vid-panel tap → ignore
   let tapCount = 0, tapTimer = null;
