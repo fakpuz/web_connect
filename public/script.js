@@ -388,10 +388,7 @@
              || navigator.getDisplayMedia?.bind(navigator);
 
     if (!gdm) {
-      const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent);
-      showToast(isIOS
-        ? 'iOS does not support screen share in browsers'
-        : 'Screen share not supported — try Chrome or update your browser');
+      showToast('Screen share is not supported on mobile browsers');
       return;
     }
     try {
