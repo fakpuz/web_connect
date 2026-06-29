@@ -1,0 +1,157 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #0f0f13;
+  --surface: #1a1a24;
+  --border:  #2a2a3a;
+  --accent:  #6c63ff;
+  --danger:  #e05252;
+  --text:    #e8e8f0;
+  --muted:   #7a7a9a;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.hidden { display: none !important; }
+
+#call-ui {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+#videos {
+  flex: 1;
+  position: relative;
+  background: #000;
+  overflow: hidden;
+}
+
+#remote-wrapper {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#remote-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+#local-wrapper {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  width: 160px;
+  height: 110px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid var(--border);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+  z-index: 10;
+}
+
+#local-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transform: scaleX(-1);
+}
+
+.video-label {
+  position: absolute;
+  bottom: 6px;
+  left: 8px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.7);
+  background: rgba(0,0,0,0.4);
+  padding: 2px 7px;
+  border-radius: 20px;
+  pointer-events: none;
+}
+
+#waiting-msg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 15px;
+  z-index: 5;
+}
+
+#controls {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px 24px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.ctrl-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  background: var(--border);
+  border: none;
+  border-radius: 10px;
+  color: var(--text);
+  cursor: pointer;
+  padding: 12px 20px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+  min-width: 72px;
+}
+
+.ctrl-btn svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+
+.ctrl-btn:hover { background: #33334a; }
+
+.ctrl-btn.off {
+  background: rgba(108, 99, 255, 0.18);
+  color: var(--accent);
+}
+
+.ctrl-btn.danger { background: rgba(224, 82, 82, 0.18); color: var(--danger); }
+.ctrl-btn.danger:hover { background: var(--danger); color: #fff; }
+
+#toast {
+  position: fixed;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(20, 20, 34, 0.95);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-size: 13px;
+  z-index: 100;
+  white-space: nowrap;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+
+@media (max-width: 500px) {
+  #local-wrapper { width: 110px; height: 78px; }
+  .ctrl-btn { padding: 10px 14px; min-width: 60px; }
+}

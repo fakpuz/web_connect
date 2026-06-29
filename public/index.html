@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebConnect</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div id="call-ui">
+    <div id="videos">
+      <div id="remote-wrapper">
+        <video id="remote-video" autoplay playsinline></video>
+        <span class="video-label">Remote</span>
+        <div id="waiting-msg">Waiting for the other person…</div>
+      </div>
+      <div id="local-wrapper">
+        <video id="local-video" autoplay playsinline muted></video>
+        <span class="video-label">You</span>
+      </div>
+    </div>
+
+    <div id="controls">
+      <button id="mute-btn" class="ctrl-btn" title="Mute / Unmute">
+        <svg viewBox="0 0 24 24"><path d="M12 1a4 4 0 0 1 4 4v7a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm-1 15.93A8 8 0 0 1 4 9H2a10 10 0 0 0 9 9.93V22h2v-3.07A10 10 0 0 0 22 9h-2a8 8 0 0 1-7 7.93V17z"/></svg>
+        <span>Mute</span>
+      </button>
+
+      <button id="camera-btn" class="ctrl-btn" title="Enable / Disable Camera">
+        <svg viewBox="0 0 24 24"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+        <span>Camera</span>
+      </button>
+
+      <button id="leave-btn" class="ctrl-btn danger" title="Leave Call">
+        <svg viewBox="0 0 24 24"><path d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.02-.24 11.36 11.36 0 0 0 3.57.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C9.61 21 3 14.39 3 6.5a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1.02l-2.2 2.2z"/></svg>
+        <span>Leave</span>
+      </button>
+    </div>
+  </div>
+
+  <div id="toast" class="hidden"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
