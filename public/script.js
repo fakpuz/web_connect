@@ -95,8 +95,8 @@
   function layoutRemoteVideos() {
     // Only layout peers whose camera is on
     const all     = Object.entries(peers).filter(([, p]) => p.panel);
-    const visible = all.filter(([, p]) => !p.cameraOff && !voiceOnly);
-    all.forEach(([, p]) => { if (p.panel) p.panel.style.display = p.cameraOff ? 'none' : ''; });
+    const visible = all.filter(([, p]) => !p.cameraOff && !p.wantsVoiceOnly && !voiceOnly);
+    all.forEach(([, p]) => { if (p.panel) p.panel.style.display = (p.cameraOff || p.wantsVoiceOnly || voiceOnly) ? 'none' : ''; });
     const n = visible.length;
     waitingMsg.style.display = n === 0 ? 'flex' : 'none';
     if (n === 0) return;
