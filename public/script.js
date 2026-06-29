@@ -93,18 +93,42 @@
   }
 
   function layoutRemoteVideos() {
-    // Only layout peers whose camera is on
     const all     = Object.entries(peers).filter(([, p]) => p.panel);
     const visible = all.filter(([, p]) => !p.cameraOff && !p.wantsVoiceOnly && !voiceOnly);
     all.forEach(([, p]) => { if (p.panel) p.panel.style.display = (p.cameraOff || p.wantsVoiceOnly || voiceOnly) ? 'none' : ''; });
-    const n = visible.length;
-    waitingMsg.style.display = n === 0 ? 'flex' : 'none';
-    if (n === 0) return;
-    const positions = computeLayout(n);
-    visible.forEach(([id, peer], i) => {
-      peer.cell = positions[i];
-      fitToRatio(peer.panel, peer.video, peer.cell);
-    });
+
+    // Waiting msg: only when truly no one is connected
+    const totalPeers = all.length;
+    waitingMsg.style.display = (totalPeers === 0 && !voiceOnly) ? 'flex' : 'none';
+
+    if (visible.length > 0) {
+      const positions = computeLayout(visible.length);
+      visible.forEach(([id, peer], i) => {
+        peer.cell = positions[i];
+        fitToRatio(peer.panel, peer.video, peer.cell);
+      });
+    }
+
+    updateStatusBar();
+  }
+
+  function updateStatusBar() {
+    const totalPeers  = Object.keys(peers).length;
+    if (totalPeers === 0) { statusBar.classList.add('hidden'); return; }
+
+    const voicePeers  = Object.values(peers).filter(p => p.wantsVoiceOnly).length;
+    const videoPeers  = totalPeers - voicePeers;
+
+    // Include self in counts
+    const totalVideo  = videoPeers  + (voiceOnly ? 0 : 1);
+    const totalVoice  = voicePeers  + (voiceOnly ? 1 : 0);
+
+    const parts = [];
+    if (totalVideo > 0) parts.push(`📹 ${totalVideo} in video`);
+    if (totalVoice > 0) parts.push(`🎙️ ${totalVoice} voice only`);
+
+    statusBar.textContent = parts.join('  ·  ');
+    statusBar.classList.remove('hidden');
   }
 
   function clampAllPanels() {
@@ -373,6 +397,7 @@
   });
 
   // ── Voice-only peer indicators ────────────────────────────────────────────
+  const statusBar       = document.getElementById('status-bar');
   const voiceOverlay    = document.getElementById('voice-overlay');
   const voiceIndicators = document.getElementById('voice-indicators');
 
@@ -403,9 +428,9 @@
     peer.wantsVoiceOnly = true;
     if (peer.videoSender) peer.videoSender.replaceTrack(null);
     updateVoiceIndicators();
+    layoutRemoteVideos();
   });
 
-  // Peer resumed video: send them our video track again
   socket.on('voice-only-off', ({ from }) => {
     const peer = peers[from];
     if (!peer) return;
@@ -415,6 +440,7 @@
       if (track) peer.videoSender.replaceTrack(track);
     }
     updateVoiceIndicators();
+    layoutRemoteVideos();
   });
 
   socket.on('peer-left',  (id) => { removeRemotePanel(id); showToast('Someone left.'); });
@@ -535,6 +561,7 @@
       }
     }
     voiceOverlay.classList.toggle('hidden', !voiceOnly);
+    if (voiceOnly) ctrlPanel.classList.add('hidden'); // close popup when entering voice-only
     layoutRemoteVideos();
     updateCtrlUI();
   }
