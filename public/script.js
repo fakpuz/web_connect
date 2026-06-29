@@ -125,28 +125,79 @@
 
   localVideo.addEventListener('loadedmetadata', fitLocalPanel);
 
-  // ── Universal drag ────────────────────────────────────────────────────────
-  function makeDraggable(el) {
-    let dragging = false, ox = 0, oy = 0;
+  // ── Drag (1 pointer) + pinch-zoom (2 pointers) on every panel ────────────
+  function makeInteractive(el) {
+    const pts = new Map(); // pointerId → {x, y}
+    let mode = 'idle';     // 'drag' | 'pinch'
+    let ox = 0, oy = 0;   // drag offset
+    let pinchDist0 = 0, pinchW0 = 0, pinchH0 = 0; // pinch baseline
+
+    function pinchStart() {
+      const [a, b] = [...pts.values()];
+      pinchDist0 = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      pinchW0    = el.offsetWidth;
+      pinchH0    = el.offsetHeight;
+    }
+
     el.addEventListener('pointerdown', (e) => {
-      dragging = true;
       el.setPointerCapture(e.pointerId);
-      const r = el.getBoundingClientRect();
-      ox = e.clientX - r.left;
-      oy = e.clientY - r.top;
-      el.style.zIndex = ++zTop; // permanent: last touched stays on top
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      el.style.zIndex = ++zTop;
       e.stopPropagation();
+
+      if (pts.size === 1) {
+        mode = 'drag';
+        const r = el.getBoundingClientRect();
+        ox = e.clientX - r.left;
+        oy = e.clientY - r.top;
+      } else if (pts.size === 2) {
+        mode = 'pinch';
+        pinchStart();
+      }
     });
+
     el.addEventListener('pointermove', (e) => {
-      if (!dragging) return;
-      const w = el.offsetWidth, h = el.offsetHeight;
-      const B = DRAG_BUFFER;
-      const x = Math.max(B - w, Math.min(window.innerWidth  - B, e.clientX - ox));
-      const y = Math.max(B - h, Math.min(window.innerHeight - B, e.clientY - oy));
-      Object.assign(el.style, { left: x+'px', top: y+'px', right: 'auto', bottom: 'auto' });
+      if (!pts.has(e.pointerId)) return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (mode === 'drag') {
+        const w = el.offsetWidth, h = el.offsetHeight, B = DRAG_BUFFER;
+        const x = Math.max(B - w, Math.min(window.innerWidth  - B, e.clientX - ox));
+        const y = Math.max(B - h, Math.min(window.innerHeight - B, e.clientY - oy));
+        Object.assign(el.style, { left: x+'px', top: y+'px', right: 'auto', bottom: 'auto' });
+      } else if (mode === 'pinch') {
+        const [a, b] = [...pts.values()];
+        const dist   = Math.hypot(b.x - a.x, b.y - a.y);
+        const scale  = dist / pinchDist0;
+        const ratio  = pinchW0 / pinchH0;
+        const newW   = Math.max(80, Math.min(window.innerWidth * 1.8, pinchW0 * scale));
+        const newH   = newW / ratio;
+        // keep the panel centered on where it was
+        const cx = el.offsetLeft + el.offsetWidth  / 2;
+        const cy = el.offsetTop  + el.offsetHeight / 2;
+        Object.assign(el.style, {
+          width: newW+'px', height: newH+'px',
+          left: (cx - newW / 2)+'px', top: (cy - newH / 2)+'px',
+          right: 'auto', bottom: 'auto',
+        });
+      }
     });
-    el.addEventListener('pointerup',    () => { dragging = false; });
-    el.addEventListener('pointercancel',() => { dragging = false; });
+
+    const onEnd = (e) => {
+      pts.delete(e.pointerId);
+      if (pts.size === 0) {
+        mode = 'idle';
+      } else if (pts.size === 1) {
+        // dropped back to one finger — switch to drag
+        mode = 'drag';
+        const [pid, pos] = [...pts.entries()][0];
+        const r = el.getBoundingClientRect();
+        ox = pos.x - r.left;
+        oy = pos.y - r.top;
+      }
+    };
+    el.addEventListener('pointerup',     onEnd);
+    el.addEventListener('pointercancel', onEnd);
   }
 
   // ── Remote peer management ────────────────────────────────────────────────
@@ -163,7 +214,7 @@
     peers[peerId].panel = panel;
     peers[peerId].video = video;
     peers[peerId].cell  = { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight };
-    makeDraggable(panel);
+    makeInteractive(panel);
     // Re-fit when we learn the real video ratio
     video.addEventListener('loadedmetadata', () => {
       if (peers[peerId]?.cell) fitToRatio(panel, video, peers[peerId].cell);
@@ -333,7 +384,7 @@
   // ── Boot ──────────────────────────────────────────────────────────────────
   window.addEventListener('DOMContentLoaded', async () => {
     fitLocalPanel();
-    makeDraggable(localPanel);
+    makeInteractive(localPanel);
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       localVideo.srcObject = localStream;
